@@ -1,21 +1,20 @@
 import type {
   AppData,
+  Deduction,
   MonthLock,
   SalaryConfig,
   ShiftEntry,
   Worker,
 } from "@/lib/storage/schema";
 
+type SaveOptions = {
+  silent?: boolean;
+};
+
 const STORAGE_KEY = "house_help_tracker_appdata";
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 const nowMs = (): number => Date.now();
-
-let onDataChanged: ((data: AppData) => void) | null = null;
-
-export const setOnDataChanged = (cb: ((data: AppData) => void) | null) => {
-  onDataChanged = cb;
-};
 
 const safeParseJSON = (raw: string | null): unknown => {
   if (!raw) return null;
@@ -32,31 +31,47 @@ const emptyData = (): AppData => ({
   entries: [],
   monthLocks: [],
   salaryConfigs: [],
+  deductions: [],
 });
 
 const normalizeData = (input: unknown): AppData => {
   const base = emptyData();
-
   if (!input || typeof input !== "object") return base;
 
-  const obj = input as Partial<AppData>;
+  const obj = input as Partial<AppData> & {
+    deductions?: unknown;
+  };
 
   return {
     version: CURRENT_VERSION,
-    workers: Array.isArray(obj.workers) ? (obj.workers as Worker[]) : [],
-    entries: Array.isArray(obj.entries) ? (obj.entries as ShiftEntry[]) : [],
-    monthLocks: Array.isArray(obj.monthLocks)
-      ? (obj.monthLocks as MonthLock[])
-      : [],
-    salaryConfigs: Array.isArray(obj.salaryConfigs)
-      ? (obj.salaryConfigs as SalaryConfig[])
+
+    workers: Array.isArray(obj.workers) ? obj.workers : [],
+
+    entries: Array.isArray(obj.entries) ? obj.entries : [],
+
+    monthLocks: Array.isArray(obj.monthLocks) ? obj.monthLocks : [],
+
+    salaryConfigs: Array.isArray(obj.salaryConfigs) ? obj.salaryConfigs : [],
+
+    deductions: Array.isArray(obj.deductions)
+      ? (obj.deductions as Deduction[])
       : [],
   };
 };
 
-const writeData = (data: AppData): void => {
+const writeData = (data: AppData, options?: SaveOptions): void => {
   if (typeof window === "undefined") return;
+
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+  // 🔕 silent write = do NOT trigger sync
+  if (options?.silent) return;
+
+  window.dispatchEvent(
+    new CustomEvent("house_help_appdata_changed", {
+      detail: { key: STORAGE_KEY, ts: Date.now() },
+    })
+  );
 };
 
 export const loadAppData = (): AppData => {
@@ -71,10 +86,9 @@ export const loadAppData = (): AppData => {
   return normalized;
 };
 
-export const saveAppData = (data: AppData): AppData => {
+export const saveAppData = (data: AppData, options?: SaveOptions): AppData => {
   const normalized = normalizeData(data);
-  writeData(normalized);
-  onDataChanged?.(normalized);
+  writeData(normalized, options);
   return normalized;
 };
 
@@ -100,6 +114,7 @@ export const deleteWorker = (workerId: string): AppData => {
   const nextEntries = data.entries.filter((e) => e.workerId !== workerId);
   const nextLocks = data.monthLocks.filter((m) => m.workerId !== workerId);
   const nextSalary = data.salaryConfigs.filter((s) => s.workerId !== workerId);
+  const nextDeductions = data.deductions.filter((d) => d.workerId !== workerId);
 
   return saveAppData({
     ...data,
@@ -107,22 +122,8 @@ export const deleteWorker = (workerId: string): AppData => {
     entries: nextEntries,
     monthLocks: nextLocks,
     salaryConfigs: nextSalary,
+    deductions: nextDeductions,
   });
-};
-
-// -------------------------
-// Entries
-// -------------------------
-export const upsertEntry = (entry: ShiftEntry): AppData => {
-  const data = loadAppData();
-  const idx = data.entries.findIndex((e) => e.id === entry.id);
-
-  const nextEntries =
-    idx >= 0
-      ? data.entries.map((e) => (e.id === entry.id ? entry : e))
-      : [entry, ...data.entries];
-
-  return saveAppData({ ...data, entries: nextEntries });
 };
 
 // -------------------------
@@ -144,6 +145,21 @@ export const upsertMonthLock = (lock: MonthLock): AppData => {
 };
 
 // -------------------------
+// Entries
+// -------------------------
+export const upsertEntry = (entry: ShiftEntry): AppData => {
+  const data = loadAppData();
+  const idx = data.entries.findIndex((e) => e.id === entry.id);
+
+  const nextEntries =
+    idx >= 0
+      ? data.entries.map((e) => (e.id === entry.id ? entry : e))
+      : [entry, ...data.entries];
+
+  return saveAppData({ ...data, entries: nextEntries });
+};
+
+// -------------------------
 // Salary config
 // -------------------------
 export const upsertSalaryConfig = (cfg: SalaryConfig): AppData => {
@@ -159,6 +175,30 @@ export const upsertSalaryConfig = (cfg: SalaryConfig): AppData => {
       : [cfg, ...data.salaryConfigs];
 
   return saveAppData({ ...data, salaryConfigs: nextSalary });
+};
+
+// -------------------------
+// Deductions
+// -------------------------
+export const upsertDeduction = (d: Deduction): AppData => {
+  const data = loadAppData();
+
+  const idx = data.deductions.findIndex((x) => x.id === d.id);
+
+  const next =
+    idx >= 0
+      ? data.deductions.map((x, i) => (i === idx ? d : x))
+      : [d, ...data.deductions];
+
+  return saveAppData({ ...data, deductions: next });
+};
+
+export const deleteDeduction = (deductionId: string): AppData => {
+  const data = loadAppData();
+  return saveAppData({
+    ...data,
+    deductions: data.deductions.filter((d) => d.id !== deductionId),
+  });
 };
 
 // Utility helpers (optional but handy)
@@ -183,6 +223,16 @@ export const getMonthLock = (
     data.monthLocks.find(
       (m) => m.workerId === workerId && m.monthKey === monthKey
     ) ?? null
+  );
+};
+
+export const getMonthDeductions = (
+  workerId: string,
+  monthKey: string
+): Deduction[] => {
+  const data = loadAppData();
+  return data.deductions.filter(
+    (d) => d.workerId === workerId && d.monthKey === monthKey
   );
 };
 

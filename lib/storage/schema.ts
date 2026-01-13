@@ -48,6 +48,22 @@ export type SalaryConfig = {
   updatedAt: number;
 };
 
+/**
+ * ✅ Deduction: money taken/advance to be deducted from payable
+ * Stored per worker per month, with a date reference.
+ */
+export type Deduction = {
+  id: string;
+  workerId: string;
+  monthKey: string; // YYYY-MM
+  dateISO: string; // YYYY-MM-DD (any date inside that month usually)
+  amount: number; // positive number (we deduct it)
+  note?: string;
+
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type AppData = {
   version: number;
   workers: Worker[];
@@ -55,4 +71,11 @@ export type AppData = {
 
   monthLocks: MonthLock[];
   salaryConfigs: SalaryConfig[];
+
+  deductions: Deduction[];
+};
+
+export type Draft = {
+  name: string;
+  defaultShiftLabel: string;
 };
