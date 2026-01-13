@@ -1,18 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-
-// ✅ If you're using NextAuth v4:
 import { getToken } from "next-auth/jwt";
-
-// If you're using NextAuth v5 instead, tell me — middleware import changes.
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // ✅ allow home page always
-  if (pathname === "/") return NextResponse.next();
-
-  // ✅ allow next-auth endpoints + static assets
+  // Allow Next.js internals & auth routes
   if (
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next") ||
@@ -21,13 +14,28 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ✅ check session
   const token = await getToken({
     req,
-    secret: process.env.NEXTAUTH_SECRET, // for v4
+    secret: process.env.NEXTAUTH_SECRET,
   });
 
-  // 🔒 Not logged in => go home
+  /**
+   * 🟢 HOME PAGE LOGIC
+   * If user is logged in and hits `/`, redirect to `/workers`
+   */
+  if (pathname === "/") {
+    if (token) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/workers";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
+  /**
+   * 🔒 PROTECTED ROUTES
+   * If not logged in → redirect to home
+   */
   if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = "/";

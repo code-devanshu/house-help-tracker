@@ -36,6 +36,9 @@ import {
   weekdayShort,
 } from "@/lib/utils/date";
 import { makeId } from "@/lib/utils/id";
+import { ShareButton } from "@/components/ShareButton";
+import { createWorkerShareLink } from "../shareActions";
+import { Toggle } from "@/components/Toggle";
 
 const STATUSES: ShiftStatus[] = ["WORKED", "ABSENT", "HALF", "OFF"];
 
@@ -61,6 +64,7 @@ const muted2 = "text-white/45";
 
 export default function WorkerTrackerPage() {
   const params = useParams<{ workerId?: string }>();
+  const [autoFillInfo, setAutoFillInfo] = useState<string | null>();
   const router = useRouter();
 
   const workerId = typeof params.workerId === "string" ? params.workerId : "";
@@ -253,9 +257,13 @@ export default function WorkerTrackerPage() {
     // Run only once per monthKey in this session/view
     if (autoFillRanRef.current.has(monthKey)) return;
 
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayISO = yesterday.toISOString().slice(0, 10);
+
     const missingIsos = monthDays
       .map((d) => toISODate(d))
-      .filter((iso) => iso <= todayISO && !entriesByDate.has(iso));
+      .filter((iso) => iso <= yesterdayISO && !entriesByDate.has(iso));
 
     if (missingIsos.length === 0) {
       autoFillRanRef.current.add(monthKey);
@@ -278,6 +286,7 @@ export default function WorkerTrackerPage() {
 
     if (store) {
       setEntries(store.entries.filter((e) => e.workerId === workerId));
+      setAutoFillInfo(yesterdayISO);
     }
 
     autoFillRanRef.current.add(monthKey);
@@ -459,39 +468,63 @@ export default function WorkerTrackerPage() {
   // ---------------------------
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 text-white">
+    <main className="mx-auto max-w-6xl px-4 py-5 text-white">
+      <div className="flex items-center justify-between gap-3 mb-5">
+        <Link
+          href="/workers"
+          className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-white/75 transition hover:bg-white/[0.06] hover:text-white"
+        >
+          <span className="text-white/55 transition group-hover:text-white/80">
+            ←
+          </span>
+          Back to workers
+        </Link>
+
+        <MonthPicker month={month} onChange={setMonth} />
+      </div>
       {/* Header */}
       <div className="rounded-[28px] bg-white/[0.03] backdrop-blur-xl shadow-[0_30px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/10 p-4 sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          {/* Left */}
-          <div className="min-w-0">
-            {/* Top row */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/workers"
-                  className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-white/75 transition hover:bg-white/[0.06] hover:text-white"
-                >
-                  <span className="text-white/55 transition group-hover:text-white/80">
-                    ←
-                  </span>
-                  Back to workers
-                </Link>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex gap-x-3">
+            <span
+              className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[10px] sm:text-xs font-semibold
+             text-white/60 ring-1 ring-white/10"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
+              Tracking enabled
+            </span>
 
-                <span className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/60 ring-1 ring-white/10">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
-                  Tracking enabled
-                </span>
-              </div>
+            <span
+              className={[
+                "inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[10px] sm:text-xs ring-1 ",
+                isMonthLocked
+                  ? "bg-rose-500/10 text-rose-100 ring-rose-400/20"
+                  : "bg-emerald-500/10 text-emerald-100 ring-emerald-400/20",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "h-2 w-2 rounded-full",
+                  isMonthLocked ? "bg-rose-400" : "bg-emerald-400",
+                ].join(" ")}
+              />
+              {isMonthLocked ? "Month locked" : "Month unlocked"}
+            </span>
+          </div>
 
-              {/* MonthPicker for mobile sits under/back row by default; on sm+ it moves right */}
-              <div className="sm:hidden">
-                <MonthPicker month={month} onChange={setMonth} />
-              </div>
-            </div>
-
+          <ShareButton
+            onShare={async () => {
+              const res = await createWorkerShareLink(worker.id, 30);
+              if (!res.ok) throw new Error(res.error);
+              await navigator.clipboard.writeText(res.data.url);
+            }}
+          />
+        </div>
+        <div className="grid grid-cols-12 gap-5">
+          <div className="col-span-12 sm:col-span-5">
             {/* Title block */}
-            <div className="mt-5 flex items-start gap-3 sm:gap-4">
+            <div className="flex items-start gap-3 sm:gap-4">
+              {/* Avatar */}
               <div className="grid h-11 w-11 sm:h-12 sm:w-12 shrink-0 place-items-center rounded-2xl bg-linear-to-br from-indigo-500/40 to-white/10 ring-1 ring-white/15">
                 <span className="text-sm font-extrabold tracking-wide text-white">
                   {(worker.name || "W")
@@ -503,6 +536,7 @@ export default function WorkerTrackerPage() {
                 </span>
               </div>
 
+              {/* Name + meta */}
               <div className="min-w-0">
                 <h1 className="truncate text-2xl sm:text-3xl font-semibold tracking-tight text-white">
                   {worker.name}
@@ -516,7 +550,7 @@ export default function WorkerTrackerPage() {
                     </span>
                   </span>
 
-                  {worker.defaultShiftLabel ? (
+                  {worker.defaultShiftLabel && (
                     <>
                       <span className="text-white/20">•</span>
                       <span className="text-white/60">
@@ -526,70 +560,27 @@ export default function WorkerTrackerPage() {
                         </span>
                       </span>
                     </>
-                  ) : null}
-                </div>
-
-                {/* On mobile, show the tracking badge here (since top row hides it) */}
-                <div className="mt-2 sm:hidden">
-                  <span className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/60 ring-1 ring-white/10">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
-                    Tracking enabled
-                  </span>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Lock row */}
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-              <span
-                className={[
-                  "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ring-1",
-                  isMonthLocked
-                    ? "bg-rose-500/10 text-rose-100 ring-rose-400/20"
-                    : "bg-emerald-500/10 text-emerald-100 ring-emerald-400/20",
-                ].join(" ")}
-              >
-                <span
-                  className={[
-                    "h-2 w-2 rounded-full",
-                    isMonthLocked ? "bg-rose-400" : "bg-emerald-400",
-                  ].join(" ")}
-                />
-                {isMonthLocked ? "Month locked" : "Month unlocked"}
-              </span>
-
-              {/* Button group: full width on mobile, compact on sm+ */}
-              <div className="inline-flex w-full sm:w-auto overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] ring-1 ring-white/5">
-                <button
-                  type="button"
-                  onClick={() => setLocked(!isMonthLocked)}
-                  className={[
-                    "h-11 sm:h-10 w-full sm:w-auto rounded-xl px-4 text-sm font-semibold transition",
-                    "border focus:outline-none focus:ring-4",
-                    isMonthLocked
-                      ? "border-white/15 bg-white/[0.06] text-white hover:bg-white/[0.12] focus:ring-white/15"
-                      : "border-rose-400/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 focus:ring-rose-500/30",
-                  ].join(" ")}
-                >
-                  {isMonthLocked ? "Unlock month" : "Lock month"}
-                </button>
-
-                <span className="hidden sm:inline-flex items-center px-3 text-xs text-white/50 whitespace-nowrap">
-                  {isMonthLocked ? "View only" : "Editable"}
-                </span>
-              </div>
-
-              <span className="text-xs text-white/45 sm:ml-1">
-                {isMonthLocked
-                  ? "Editing disabled for this month."
-                  : "Tap a day to update status."}
-              </span>
+            {/* Helper text sits under actions (more premium) */}
+            <div className="mt-3 text-xs text-white/45 ">
+              {isMonthLocked
+                ? "Editing disabled for this month."
+                : "Tap a day to update status."}
             </div>
           </div>
 
-          {/* Right (desktop MonthPicker) */}
-          <div className="hidden sm:block shrink-0">
-            <MonthPicker month={month} onChange={setMonth} />
+          <div className="col-span-12 sm:col-span-7 place-self-end">
+            <div className="flex items-center gap-4 mb-3">
+              <span className="text-sm text-white/70">Lock Month</span>
+              <Toggle
+                value={isMonthLocked}
+                onChange={() => setLocked(!isMonthLocked)}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -641,6 +632,15 @@ export default function WorkerTrackerPage() {
         </div>
       </div>
 
+      {autoFillInfo && (
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-white/70">
+          Attendance auto-filled up to{" "}
+          <span className="font-semibold text-white">{autoFillInfo}</span>.
+          Today will be automatically marked as{" "}
+          <span className="font-semibold text-white">Present</span> at the end
+          of the day.
+        </div>
+      )}
       {/* Calendar + right */}
       <div className="mt-6 grid gap-4 lg:grid-cols-[1.4fr_0.6fr]">
         {/* Calendar */}

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Deduction } from "@/lib/storage/schema";
+import { Toggle } from "./Toggle";
 
 type SalaryBreakdown = {
   worked: number;
@@ -85,6 +86,8 @@ export function SalaryCard({
     () => (Array.isArray(deductions) ? deductions : []),
     [deductions]
   );
+
+  const [enabled, setEnabled] = useState(false);
 
   const canAddDeductionHandler = typeof onAddDeduction === "function";
   const canDeleteDeductionHandler = typeof onDeleteDeduction === "function";
@@ -208,10 +211,16 @@ export function SalaryCard({
               <span className="font-semibold text-white">{daysInMonth}</span>{" "}
               days. OFF is paid only up to the allowance.
             </p>
+
+            <div className="flex items-center gap-4 mt-3">
+              <Toggle value={enabled} onChange={setEnabled} />
+
+              <span className="text-sm text-white/70">Enable Settings</span>
+            </div>
           </div>
 
           {/* Payable */}
-          <div className="min-w-[260px] rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.09] to-white/[0.04] px-5 py-4">
+          <div className="min-w-[260px] w-full sm:w-auto rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.09] to-white/[0.04] px-5 py-4">
             <div className="flex items-center justify-between gap-3">
               <div className={cx("text-xs font-semibold", muted)}>
                 Net payable (auto)
@@ -243,8 +252,12 @@ export function SalaryCard({
       </div>
 
       {/* Content */}
-      <div className="px-2 sm:px-6  py-6">
-        <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+      <div className="px-2 sm:px-6 py-6">
+        <div
+          className={`grid gap-4 lg:grid-cols-[1.25fr_0.75fr] ${
+            enabled ? "" : "hidden"
+          }`}
+        >
           {/* Settings */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-5">
             <div className="flex items-start justify-between gap-3">
@@ -373,7 +386,11 @@ export function SalaryCard({
         </div>
 
         {/* ✅ Deductions panel */}
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-5">
+        <div
+          className={`mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-5 ${
+            enabled ? "" : "hidden"
+          }`}
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-white/90">
@@ -514,7 +531,7 @@ export function SalaryCard({
         </div>
 
         {/* Breakdown tiles */}
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-5 grid grid-cols-1 gap-3 grid-cols-2 lg:grid-cols-4">
           <BreakTile
             title="Worked"
             subtitle={`${totals.worked} × ₹${money(perDay)}`}

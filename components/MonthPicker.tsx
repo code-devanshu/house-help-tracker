@@ -13,7 +13,7 @@ export function MonthPicker({
     <div className="flex items-center justify-end">
       <div
         className={[
-          "inline-flex items-center gap-1.5 rounded-2xl px-2 py-2",
+          "inline-flex items-center gap-1.5 rounded-2xl px-2 py-1",
           "bg-black/20 backdrop-blur-xl ring-1 ring-white/10",
           "shadow-[0_16px_50px_rgba(0,0,0,0.35)]",
         ].join(" ")}
@@ -27,9 +27,6 @@ export function MonthPicker({
         </IconBtn>
 
         <div className="px-3 sm:px-4">
-          <div className="text-[11px] font-medium tracking-wide text-white/50">
-            Month
-          </div>
           <div className="text-base font-semibold tracking-tight text-white">
             {monthLabel(month)}
           </div>

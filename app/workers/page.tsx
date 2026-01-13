@@ -14,6 +14,8 @@ import type { Draft, Worker } from "@/lib/storage/schema";
 import { makeId, timeAgo } from "@/lib/utils/id";
 import { getAppData, syncAppData } from "./action";
 
+import { createWorkerShareLink } from "./shareActions";
+
 export default function WorkersPage() {
   const [isPending, startTransition] = useTransition();
 
@@ -126,40 +128,11 @@ export default function WorkersPage() {
   // ---------- RENDER ----------
   return (
     <main className="text-slate-100">
-      {/* HEADER */}
-      <header className="border-b border-white/10 bg-[#0B1020]/70 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-4 py-5">
-          <div className="flex items-start justify-between gap-6">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-tight text-white">
-                  Workers
-                </h1>
-                <span className="inline-flex items-center rounded-full bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-400 ring-1 ring-indigo-400/20">
-                  Cloud-synced
-                </span>
-                <span className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-medium text-white/70 ring-1 ring-white/10">
-                  {workers.length} total
-                </span>
-              </div>
-              <p className="mt-1 max-w-[62ch] text-sm text-white/55">
-                Manage your team. Changes are saved locally and synced to your
-                account automatically.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/4 px-3 py-2">
-              <AuthButtons />
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* BODY */}
-      <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="mx-auto max-w-6xl px-4 py-5">
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           {/* ADD WORKER */}
-          <aside className="rounded-2xl border border-white/10 bg-[#0F1730] shadow-xl">
+          <aside className="rounded-2xl border border-white/10 bg-white/[0.03] shadow-xl">
             <div className="border-b border-white/10 px-5 py-4">
               <div className="text-sm font-semibold text-white/90">
                 Add worker
@@ -224,7 +197,7 @@ export default function WorkersPage() {
           </aside>
 
           {/* WORKERS LIST */}
-          <div className="rounded-2xl border border-white/10 bg-[#0F1730] shadow-xl">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] shadow-xl">
             <div className="border-b border-white/10 px-6 py-4 text-sm font-semibold text-white/90">
               Your workers
             </div>
