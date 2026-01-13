@@ -19,41 +19,72 @@ export function useLocalStorageAutoSync({
   const lastPayloadRef = useRef<string>("");
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      console.debug("[AutoSync] Disabled");
+      return;
+    }
+
+    console.debug("[AutoSync] Enabled", { debounceMs });
 
     const handler = () => {
+      console.debug("[AutoSync] Change event received");
+
       // debounce rapid changes
-      if (timerRef.current) window.clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        console.debug("[AutoSync] Clearing previous debounce");
+        window.clearTimeout(timerRef.current);
+      }
 
       timerRef.current = window.setTimeout(async () => {
-        if (syncingRef.current) return;
+        if (syncingRef.current) {
+          console.debug("[AutoSync] Sync already in progress, skipping");
+          return;
+        }
+
+        console.debug("[AutoSync] Debounce elapsed, preparing sync");
 
         const data: AppData = loadAppData();
         const payload = JSON.stringify(data);
 
         // avoid resync if nothing changed
-        if (payload === lastPayloadRef.current) return;
-        lastPayloadRef.current = payload;
+        if (payload === lastPayloadRef.current) {
+          console.debug("[AutoSync] Payload unchanged, skipping sync");
+          return;
+        }
 
+        lastPayloadRef.current = payload;
         syncingRef.current = true;
+
+        console.debug("[AutoSync] Sync started", {
+          bytes: payload.length,
+        });
+
         try {
           const res = await syncAppData(data);
-          if (!res.ok) {
-            console.error("Sync failed:", res.error);
+
+          if (res.ok) {
+            console.debug("[AutoSync] Sync successful", {
+              updatedAt: res.data.updated_at,
+            });
+          } else {
+            console.error("[AutoSync] Sync failed", res.error);
           }
         } catch (e) {
-          console.error("Sync exception:", e);
+          console.error("[AutoSync] Sync exception", e);
         } finally {
           syncingRef.current = false;
+          console.debug("[AutoSync] Sync finished");
         }
       }, debounceMs);
     };
 
     window.addEventListener("house_help_appdata_changed", handler);
+    console.debug("[AutoSync] Event listener attached");
 
     return () => {
       window.removeEventListener("house_help_appdata_changed", handler);
       if (timerRef.current) window.clearTimeout(timerRef.current);
+      console.debug("[AutoSync] Cleaned up");
     };
   }, [debounceMs, enabled]);
 }

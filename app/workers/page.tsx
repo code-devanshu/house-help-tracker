@@ -13,19 +13,14 @@ import {
 import type { Draft, Worker } from "@/lib/storage/schema";
 import { makeId, timeAgo } from "@/lib/utils/id";
 import { getAppData, syncAppData } from "./action";
-import { useLocalStorageAutoSync } from "@/hooks/useLocalStorageAutoSync";
 
 export default function WorkersPage() {
-  useLocalStorageAutoSync({ debounceMs: 1000 });
   const [isPending, startTransition] = useTransition();
 
-  // ✅ Fix: Initialize state directly from local storage.
-  // This prevents the "cascading render" error by setting the initial state synchronously.
+  // ---------- STATE ----------
   const [workers, setWorkers] = useState<Worker[]>(() => {
-    // This runs only once on initialization
     if (typeof window !== "undefined") {
-      const data = loadAppData();
-      return data.workers;
+      return loadAppData().workers;
     }
     return [];
   });
@@ -35,19 +30,30 @@ export default function WorkersPage() {
     defaultShiftLabel: "",
   });
 
-  // 1. INITIAL SYNC ON MOUNT
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    workerId: string | null;
+    workerName: string;
+    typed: string;
+  }>({
+    open: false,
+    workerId: null,
+    workerName: "",
+    typed: "",
+  });
+
+  // ---------- INITIAL SYNC ----------
   useEffect(() => {
     startTransition(async () => {
       try {
         const remote = await getAppData();
+
         if (remote?.data) {
-          // Sync Server -> Local
           saveAppData(remote.data, { silent: true });
           setWorkers(remote.data.workers);
         } else {
-          // Sync Local -> Server (First time setup)
-          const currentLocal = loadAppData();
-          await syncAppData(currentLocal);
+          const local = loadAppData();
+          await syncAppData(local);
         }
       } catch (err) {
         console.error("Initial sync failed:", err);
@@ -55,13 +61,10 @@ export default function WorkersPage() {
     });
   }, []);
 
-  // 2. REUSABLE PERSISTENCE LOGIC
-  // Called from Event Handlers (Add/Delete)
+  // ---------- HELPERS ----------
   const persistAndSync = (nextData: ReturnType<typeof loadAppData>) => {
-    // Update local state for instant UI feedback (Optimistic)
     setWorkers(nextData.workers);
 
-    // Sync to Supabase in the background via Server Action
     startTransition(async () => {
       const result = await syncAppData(nextData);
       if (!result.ok) {
@@ -70,10 +73,10 @@ export default function WorkersPage() {
     });
   };
 
-  // 3. HANDLERS
   const canAdd = useMemo(() => draft.name.trim().length >= 2, [draft.name]);
   const empty = workers.length === 0;
 
+  // ---------- ADD ----------
   const handleAdd = () => {
     if (!canAdd) return;
 
@@ -91,16 +94,39 @@ export default function WorkersPage() {
     setDraft({ name: "", defaultShiftLabel: "" });
   };
 
-  const handleDelete = (workerId: string) => {
-    const ok = window.confirm("Delete this worker and all their entries?");
-    if (!ok) return;
-
-    const next = deleteWorker(workerId);
-    persistAndSync(next);
+  // ---------- DELETE MODAL ----------
+  const openDeleteModal = (worker: Worker) => {
+    setDeleteModal({
+      open: true,
+      workerId: worker.id,
+      workerName: worker.name,
+      typed: "",
+    });
   };
 
+  const closeDeleteModal = () => {
+    setDeleteModal({
+      open: false,
+      workerId: null,
+      workerName: "",
+      typed: "",
+    });
+  };
+
+  const confirmDeleteModal = () => {
+    if (!deleteModal.workerId) return;
+
+    if (deleteModal.typed.trim() !== deleteModal.workerName.trim()) return;
+
+    const next = deleteWorker(deleteModal.workerId);
+    persistAndSync(next);
+    closeDeleteModal();
+  };
+
+  // ---------- RENDER ----------
   return (
     <main className="text-slate-100">
+      {/* HEADER */}
       <header className="border-b border-white/10 bg-[#0B1020]/70 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-5">
           <div className="flex items-start justify-between gap-6">
@@ -122,18 +148,17 @@ export default function WorkersPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-white/10 bg-white/4 px-3 py-2">
-                <AuthButtons />
-              </div>
+            <div className="rounded-2xl border border-white/10 bg-white/4 px-3 py-2">
+              <AuthButtons />
             </div>
           </div>
         </div>
       </header>
 
+      {/* BODY */}
       <div className="mx-auto max-w-6xl px-4 py-8">
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-          {/* Left: Add worker Sidebar */}
+          {/* ADD WORKER */}
           <aside className="rounded-2xl border border-white/10 bg-[#0F1730] shadow-xl">
             <div className="border-b border-white/10 px-5 py-4">
               <div className="text-sm font-semibold text-white/90">
@@ -152,7 +177,6 @@ export default function WorkersPage() {
                   onChange={(e) =>
                     setDraft((d) => ({ ...d, name: e.target.value }))
                   }
-                  placeholder="e.g., Yashoda di"
                   className="h-11 rounded-xl border border-white/10 bg-[#0B1020] px-4 text-sm text-white outline-none focus:border-indigo-400/50"
                 />
               </label>
@@ -169,7 +193,6 @@ export default function WorkersPage() {
                       defaultShiftLabel: e.target.value,
                     }))
                   }
-                  placeholder="Morning / Evening"
                   className="h-11 rounded-xl border border-white/10 bg-[#0B1020] px-4 text-sm text-white outline-none focus:border-indigo-400/50"
                 />
               </label>
@@ -188,7 +211,6 @@ export default function WorkersPage() {
               </button>
             </div>
 
-            {/* Sync Status Footer */}
             <div className="border-t border-white/10 bg-black/10 px-5 py-4">
               <div className="flex items-center gap-2 text-xs text-white/55">
                 <span
@@ -196,19 +218,15 @@ export default function WorkersPage() {
                     isPending ? "bg-yellow-400 animate-pulse" : "bg-green-500"
                   }`}
                 />
-                <span>
-                  {isPending ? "Syncing changes..." : "Cloud is up to date"}
-                </span>
+                {isPending ? "Syncing changes..." : "Cloud is up to date"}
               </div>
             </div>
           </aside>
 
-          {/* Right: List Section */}
+          {/* WORKERS LIST */}
           <div className="rounded-2xl border border-white/10 bg-[#0F1730] shadow-xl">
-            <div className="flex items-start justify-between gap-3 border-b border-white/10 px-6 py-4">
-              <div className="text-sm font-semibold text-white/90">
-                Your workers
-              </div>
+            <div className="border-b border-white/10 px-6 py-4 text-sm font-semibold text-white/90">
+              Your workers
             </div>
 
             {empty ? (
@@ -220,7 +238,7 @@ export default function WorkersPage() {
                 {workers.map((w) => (
                   <div
                     key={w.id}
-                    className="flex items-center justify-between px-6 py-4 hover:bg-white/5 transition-colors"
+                    className="flex items-center justify-between px-6 py-4 hover:bg-white/5"
                   >
                     <div>
                       <div className="text-sm font-semibold text-white">
@@ -230,6 +248,7 @@ export default function WorkersPage() {
                         Updated {timeAgo(w.updatedAt)}
                       </div>
                     </div>
+
                     <div className="flex gap-2">
                       <Link
                         href={`/workers/${w.id}`}
@@ -238,7 +257,7 @@ export default function WorkersPage() {
                         Open
                       </Link>
                       <button
-                        onClick={() => handleDelete(w.id)}
+                        onClick={() => openDeleteModal(w)}
                         className="px-3 py-1.5 border border-white/10 text-xs font-bold rounded-lg text-white/80 hover:bg-white/5"
                       >
                         Delete
@@ -251,6 +270,78 @@ export default function WorkersPage() {
           </div>
         </div>
       </div>
+
+      {/* DELETE CONFIRM MODAL */}
+      {deleteModal.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeDeleteModal();
+          }}
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+          <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0B1020] shadow-[0_30px_90px_rgba(0,0,0,0.7)]">
+            <div className="border-b border-white/10 px-5 py-4">
+              <div className="text-sm font-semibold text-white">
+                Confirm deletion
+              </div>
+              <div className="mt-1 text-xs text-white/55">
+                This action is permanent.
+              </div>
+            </div>
+
+            <div className="px-5 py-5 space-y-4">
+              <div className="rounded-xl border border-rose-400/20 bg-rose-500/10 px-4 py-3">
+                <div className="text-xs font-semibold text-rose-100">
+                  Type the worker name to confirm:
+                </div>
+                <div className="mt-1 text-sm font-extrabold text-white">
+                  {deleteModal.workerName}
+                </div>
+              </div>
+
+              <input
+                autoFocus
+                value={deleteModal.typed}
+                onChange={(e) =>
+                  setDeleteModal((m) => ({ ...m, typed: e.target.value }))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") closeDeleteModal();
+                  if (e.key === "Enter") confirmDeleteModal();
+                }}
+                className="h-11 w-full rounded-xl border border-white/10 bg-[#0F1730] px-4 text-sm text-white outline-none focus:border-rose-400/50"
+              />
+
+              <div className="flex gap-3">
+                <button
+                  onClick={closeDeleteModal}
+                  className="h-11 flex-1 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white/80 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={confirmDeleteModal}
+                  disabled={
+                    deleteModal.typed.trim() !==
+                      deleteModal.workerName.trim() || isPending
+                  }
+                  className={`h-11 flex-1 rounded-xl text-sm font-extrabold transition ${
+                    deleteModal.typed.trim() ===
+                      deleteModal.workerName.trim() && !isPending
+                      ? "bg-rose-500 text-white hover:bg-rose-400"
+                      : "bg-white/10 text-white/40"
+                  }`}
+                >
+                  Delete permanently
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

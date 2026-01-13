@@ -82,7 +82,7 @@ export const loadAppData = (): AppData => {
   const normalized = normalizeData(parsed);
 
   // persist normalized/migrated shape
-  writeData(normalized);
+  writeData(normalized, { silent: true });
   return normalized;
 };
 
