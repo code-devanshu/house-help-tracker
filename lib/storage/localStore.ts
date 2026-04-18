@@ -107,6 +107,26 @@ export const upsertWorker = (worker: Worker): AppData => {
   return saveAppData({ ...data, workers: nextWorkers });
 };
 
+export const archiveWorker = (workerId: string): AppData => {
+  const data = loadAppData();
+  return saveAppData({
+    ...data,
+    workers: data.workers.map((w) =>
+      w.id === workerId ? { ...w, archivedAt: Date.now(), updatedAt: Date.now() } : w
+    ),
+  });
+};
+
+export const restoreWorker = (workerId: string): AppData => {
+  const data = loadAppData();
+  return saveAppData({
+    ...data,
+    workers: data.workers.map((w) =>
+      w.id === workerId ? { ...w, archivedAt: undefined, updatedAt: Date.now() } : w
+    ),
+  });
+};
+
 export const deleteWorker = (workerId: string): AppData => {
   const data = loadAppData();
 

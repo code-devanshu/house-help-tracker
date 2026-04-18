@@ -4,6 +4,9 @@ export type Worker = {
   id: string;
   name: string;
   defaultShiftLabel?: string;
+  startDate?: string; // YYYY-MM-DD — the date this worker started
+
+  archivedAt?: number;
 
   createdAt: number;
   updatedAt: number;
@@ -78,4 +81,5 @@ export type AppData = {
 export type Draft = {
   name: string;
   defaultShiftLabel: string;
+  startDate: string;
 };

@@ -2,607 +2,259 @@
 
 import { useMemo, useState } from "react";
 import type { Deduction } from "@/lib/storage/schema";
-import { Toggle } from "./Toggle";
 
-type SalaryBreakdown = {
-  worked: number;
-  half: number;
-  absent: number;
-  off: number;
-};
+type SalaryBreakdown = { worked: number; half: number; absent: number; off: number };
 
 type Props = {
+  workerId?: string;
   monthKey: string;
   daysInMonth: number;
   totals: SalaryBreakdown;
-
   savedMonthlySalary: number;
   savedPaidOffAllowance: number;
-
   salaryDraft: string;
   paidOffDraft: string;
-
   disabled?: boolean;
-
-  onSalaryDraftChange: (value: string) => void;
-  onPaidOffDraftChange: (value: string) => void;
+  onSalaryDraftChange: (v: string) => void;
+  onPaidOffDraftChange: (v: string) => void;
   onSave: () => void;
-
-  // ✅ Deductions (Plan B)
   deductions?: Deduction[];
-  onAddDeduction?: (
-    next: Omit<Deduction, "id" | "createdAt" | "updatedAt">
-  ) => void;
-  onDeleteDeduction?: (deductionId: string) => void;
+  onAddDeduction?: (next: Omit<Deduction, "id" | "createdAt" | "updatedAt">) => void;
+  onDeleteDeduction?: (id: string) => void;
 };
 
-const clampInt = (n: number, min: number, max: number) => {
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, Math.round(n)));
-};
-
-const toNum = (v: string): number => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const money = (n: number): string => {
-  if (!Number.isFinite(n)) return "0";
-  return String(Math.round(n));
-};
-
-const cx = (...parts: Array<string | false | null | undefined>) =>
-  parts.filter(Boolean).join(" ");
-
-const surface =
-  "rounded-3xl border border-white/10 bg-white/[0.05] shadow-[0_20px_60px_rgba(0,0,0,0.35)]";
-const surfaceHeader = "border-b border-white/10";
-const muted = "text-white/60";
-const muted2 = "text-white/45";
+const toNum = (v: string) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(Number.isFinite(n) ? n : min)));
+const money = (n: number) => { if (!Number.isFinite(n)) return "0"; const r = Math.round(n); return r.toLocaleString("en-IN"); };
 
 export function SalaryCard({
+  workerId = "",
   monthKey,
   daysInMonth,
   totals,
-
   savedMonthlySalary,
   savedPaidOffAllowance,
-
   salaryDraft,
   paidOffDraft,
-
   disabled = false,
-
   onSalaryDraftChange,
   onPaidOffDraftChange,
   onSave,
-
   deductions,
   onAddDeduction,
   onDeleteDeduction,
 }: Props) {
-  // ✅ Defensive: never crash if parent passes undefined/wrong type
-  const safeDeductions: Deduction[] = useMemo(
-    () => (Array.isArray(deductions) ? deductions : []),
-    [deductions]
-  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deductAmount, setDeductAmount] = useState("");
+  const [deductNote, setDeductNote] = useState("");
+  const [deductDate, setDeductDate] = useState(`${monthKey}-01`);
 
-  const [enabled, setEnabled] = useState(false);
+  const safeDeductions = useMemo(() => (Array.isArray(deductions) ? deductions : []), [deductions]);
 
-  const canAddDeductionHandler = typeof onAddDeduction === "function";
-  const canDeleteDeductionHandler = typeof onDeleteDeduction === "function";
-
-  const monthlySalary = useMemo(
-    () => clampInt(toNum(salaryDraft), 0, 1_000_000_000),
-    [salaryDraft]
-  );
-
-  const paidOffAllowance = useMemo(
-    () => clampInt(toNum(paidOffDraft), 0, 366),
-    [paidOffDraft]
-  );
-
-  const perDay = useMemo(
-    () => (daysInMonth > 0 ? monthlySalary / daysInMonth : 0),
-    [monthlySalary, daysInMonth]
-  );
-
+  const monthlySalary = useMemo(() => clamp(toNum(salaryDraft), 0, 1_000_000_000), [salaryDraft]);
+  const paidOffAllowance = useMemo(() => clamp(toNum(paidOffDraft), 0, 366), [paidOffDraft]);
+  const perDay = daysInMonth > 0 ? monthlySalary / daysInMonth : 0;
   const halfDay = perDay / 2;
-
   const paidOffCount = Math.min(totals.off, paidOffAllowance);
   const unpaidOffCount = Math.max(0, totals.off - paidOffAllowance);
-
-  const workedAmt = totals.worked * perDay;
-  const halfAmt = totals.half * halfDay;
-  const absentAmt = 0;
-  const offAmt = paidOffCount * perDay;
-
-  const grossPayable = workedAmt + halfAmt + absentAmt + offAmt;
-
-  const deductionsTotal = useMemo(() => {
-    let sum = 0;
-    for (const d of safeDeductions) {
-      const amt = Number(d.amount);
-      if (Number.isFinite(amt) && amt > 0) sum += amt;
-    }
-    return sum;
-  }, [safeDeductions]);
-
+  const grossPayable = totals.worked * perDay + totals.half * halfDay + paidOffCount * perDay;
+  const deductionsTotal = useMemo(() => safeDeductions.reduce((s, d) => { const a = Number(d.amount); return s + (Number.isFinite(a) && a > 0 ? a : 0); }, 0), [safeDeductions]);
   const netPayable = Math.max(0, grossPayable - deductionsTotal);
+  const isDirty = monthlySalary !== (savedMonthlySalary ?? 0) || paidOffAllowance !== (savedPaidOffAllowance ?? 0);
 
-  const isDirty =
-    monthlySalary !== (savedMonthlySalary ?? 0) ||
-    paidOffAllowance !== (savedPaidOffAllowance ?? 0);
-
-  const disabledMsg = disabled
-    ? "Month is locked. Unlock to edit salary."
-    : isDirty
-    ? "Changes not saved yet."
-    : "Saved and applied instantly.";
-
-  // -------------------------
-  // Deduction Draft UI
-  // -------------------------
-  const [deductAmount, setDeductAmount] = useState<string>("");
-  const [deductNote, setDeductNote] = useState<string>("");
-  const [deductDate, setDeductDate] = useState<string>(() => {
-    // default: first day of that month if possible, else fallback today
-    const safe = `${monthKey}-01`;
-    return safe;
-  });
-
-  const canAddDeduction = useMemo(() => {
-    const amt = Number(deductAmount);
-    return Number.isFinite(amt) && amt > 0;
-  }, [deductAmount]);
+  const canAddDeduction = useMemo(() => { const a = Number(deductAmount); return Number.isFinite(a) && a > 0; }, [deductAmount]);
 
   const handleAddDeduction = () => {
-    if (disabled) return;
-    if (!canAddDeductionHandler) return;
-    if (!canAddDeduction) return;
-
-    const amt = Math.round(Number(deductAmount));
-    const next = {
-      workerId: safeDeductions[0]?.workerId ?? "", // parent should provide correct workerId in real usage
-      monthKey,
-      dateISO: deductDate || `${monthKey}-01`,
-      amount: amt,
-      note: deductNote.trim() || undefined,
-    } as Omit<Deduction, "id" | "createdAt" | "updatedAt">;
-
-    // NOTE: workerId should be passed correctly from parent; if you want this component
-    // to be fully self-sufficient, add `workerId` to Props. For now we keep it parent-driven.
-    onAddDeduction(next);
-
-    setDeductAmount("");
-    setDeductNote("");
-  };
-
-  const handleDeleteDeduction = (id: string) => {
-    if (disabled) return;
-    if (!canDeleteDeductionHandler) return;
-    onDeleteDeduction(id);
+    if (disabled || !onAddDeduction || !canAddDeduction) return;
+    onAddDeduction({ workerId, monthKey, dateISO: deductDate || `${monthKey}-01`, amount: Math.round(Number(deductAmount)), note: deductNote.trim() || undefined });
+    setDeductAmount(""); setDeductNote("");
   };
 
   return (
-    <section className={cx(surface, "text-white")}>
-      {/* Header */}
-      <div className={cx(surfaceHeader, "px-2 sm:px-6 py-5")}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-[260px]">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="text-base font-semibold tracking-tight text-white/90">
-                Salary
-              </div>
+    <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] text-white">
 
-              <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/70 ring-1 ring-white/10">
-                {monthKey}
-              </span>
-
-              {disabled ? (
-                <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80 ring-1 ring-white/15">
-                  Locked
-                </span>
-              ) : null}
-            </div>
-
-            <p className={cx("mt-1 text-sm leading-relaxed", muted)}>
-              Monthly salary is split across{" "}
-              <span className="font-semibold text-white">{daysInMonth}</span>{" "}
-              days. OFF is paid only up to the allowance.
-            </p>
-
-            <div className="flex items-center gap-4 mt-3">
-              <Toggle value={enabled} onChange={setEnabled} />
-
-              <span className="text-sm text-white/70">Enable Settings</span>
-            </div>
+      {/* ── Header row ── */}
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.07] px-5 py-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-white/85">Salary</span>
+            <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px] text-white/45">{monthKey}</span>
+            {disabled && (
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300 ring-1 ring-amber-500/20">Locked</span>
+            )}
           </div>
+          <p className="mt-1 text-xs text-white/40">
+            ₹{money(perDay)}/day · {daysInMonth} days in month
+          </p>
+        </div>
 
-          {/* Payable */}
-          <div className="min-w-[260px] w-full sm:w-auto rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.09] to-white/[0.04] px-5 py-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className={cx("text-xs font-semibold", muted)}>
-                Net payable (auto)
-              </div>
-
-              <span className="rounded-full bg-white/5 px-2 py-1 text-[11px] font-semibold text-white/70 ring-1 ring-white/10">
-                OFF: {paidOffCount} paid
-                {unpaidOffCount ? ` • ${unpaidOffCount} unpaid` : ""}
-              </span>
-            </div>
-
-            <div className="mt-2 text-3xl font-extrabold tracking-tight text-white">
-              ₹{money(netPayable)}
-            </div>
-
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-              <span className={muted2}>Gross: ₹{money(grossPayable)}</span>
-              <span className="text-white/20">•</span>
-              <span className="text-white/70">
-                Deductions: ₹{money(deductionsTotal)}
-              </span>
-            </div>
-
-            <div className={cx("mt-1 text-xs", muted2)}>
-              Based on attendance for this month
-            </div>
+        {/* Net payable pill */}
+        <div className="min-w-[180px] rounded-2xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-3">
+          <div className="text-[11px] font-medium text-emerald-400/70">Net payable</div>
+          <div className="mt-0.5 text-2xl font-bold tracking-tight text-emerald-300">₹{money(netPayable)}</div>
+          <div className="mt-1 text-[11px] text-white/35">
+            Gross ₹{money(grossPayable)}
+            {deductionsTotal > 0 && <span className="text-rose-400/70"> − ₹{money(deductionsTotal)}</span>}
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="px-2 sm:px-6 py-6">
-        <div
-          className={`grid gap-4 lg:grid-cols-[1.25fr_0.75fr] ${
-            enabled ? "" : "hidden"
-          }`}
-        >
-          {/* Settings */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-white/90">
-                  Settings
-                </div>
-                <div className={cx("mt-1 text-xs", muted2)}>
-                  Update salary and OFF allowance for this month.
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-white/5 px-3 py-2 text-[11px] font-semibold text-white/70 ring-1 ring-white/10">
-                Per-day: ₹{money(perDay)}
-              </div>
+      {/* ── Breakdown tiles ── */}
+      <div className="grid grid-cols-2 gap-2.5 border-b border-white/[0.07] px-5 py-4 lg:grid-cols-4">
+        {[
+          { title: "Worked", sub: `${totals.worked} × ₹${money(perDay)}`, amt: totals.worked * perDay, color: "text-emerald-400", bar: "bg-emerald-400/60" },
+          { title: "Half day", sub: `${totals.half} × ₹${money(halfDay)}`, amt: totals.half * halfDay, color: "text-amber-400", bar: "bg-amber-400/60" },
+          { title: "Absent", sub: `${totals.absent} × ₹0`, amt: 0, color: "text-rose-400", bar: "bg-rose-400/60" },
+          { title: "Off", sub: `${paidOffCount} paid · ${unpaidOffCount} unpaid`, amt: paidOffCount * perDay, color: "text-slate-400", bar: "bg-slate-400/40" },
+        ].map((t) => (
+          <div key={t.title} className="relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5">
+            <div className={`absolute left-0 top-0 h-full w-0.5 ${t.bar}`} />
+            <div className="pl-2">
+              <div className="text-[11px] font-medium text-white/45">{t.title}</div>
+              <div className="mt-0.5 text-[11px] text-white/30">{t.sub}</div>
+              <div className={`mt-2 text-lg font-bold ${t.color}`}>₹{money(t.amt)}</div>
             </div>
+          </div>
+        ))}
+      </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 sm:items-start">
-              {/* Monthly salary */}
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-white/80">
-                  Monthly salary <span className="text-white/40">(₹)</span>
-                </span>
+      {/* ── Settings (collapsible) ── */}
+      <div className="border-b border-white/[0.07]">
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((v) => !v)}
+          className="flex w-full items-center justify-between px-5 py-3.5 text-sm transition hover:bg-white/[0.02]"
+        >
+          <div className="flex items-center gap-2 font-medium text-white/60">
+            <svg className="h-3.5 w-3.5 text-white/35" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.42 1.42M11.53 11.53l1.42 1.42M3.05 12.95l1.42-1.42M11.53 4.47l1.42-1.42" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+            Salary settings
+            {isDirty && !disabled && (
+              <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-semibold text-indigo-400">Unsaved</span>
+            )}
+          </div>
+          <span className={`text-white/25 text-xs transition-transform duration-200 ${settingsOpen ? "rotate-180" : ""}`}>▼</span>
+        </button>
 
+        {settingsOpen && (
+          <div className="border-t border-white/[0.07] px-5 pb-5 pt-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-white/35">Monthly salary (₹)</span>
                 <input
-                  type="number"
-                  min={0}
-                  step={1}
+                  type="number" min={0} step={1}
                   disabled={disabled}
                   value={salaryDraft}
                   onChange={(e) => onSalaryDraftChange(e.target.value)}
-                  className={cx(
-                    "h-11 rounded-xl border px-4 text-sm outline-none transition",
-                    "border-white/10 bg-white/[0.03] text-white placeholder:text-white/30",
-                    !disabled &&
-                      "focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/15",
-                    disabled && "opacity-60"
-                  )}
-                  placeholder="e.g., 12000"
+                  className="h-10 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-40"
+                  placeholder="e.g. 12000"
                 />
-
-                <span className="min-h-[16px] text-xs text-white/35" />
               </label>
-
-              {/* Paid OFF allowance */}
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-white/80">
-                  Paid OFF allowance{" "}
-                  <span className="text-white/40">(days)</span>
-                </span>
-
+              <label className="grid gap-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-white/35">Paid OFF allowance (days)</span>
                 <input
-                  type="number"
-                  min={0}
-                  step={1}
+                  type="number" min={0} step={1}
                   disabled={disabled}
                   value={paidOffDraft}
                   onChange={(e) => onPaidOffDraftChange(e.target.value)}
-                  className={cx(
-                    "h-11 rounded-xl border px-4 text-sm outline-none transition",
-                    "border-white/10 bg-white/[0.03] text-white placeholder:text-white/30",
-                    !disabled &&
-                      "focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/15",
-                    disabled && "opacity-60"
-                  )}
-                  placeholder="e.g., 4"
+                  className="h-10 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-40"
+                  placeholder="e.g. 4"
                 />
-
-                <span className="text-xs text-white/45">
-                  Extra OFF days beyond allowance become unpaid (₹0).
-                </span>
               </label>
             </div>
-
-            <div className="mt-5 flex flex-wrap items-center gap-3">
+            <div className="mt-4 flex items-center gap-3">
               <button
                 type="button"
                 disabled={disabled || !isDirty}
                 onClick={onSave}
-                className={cx(
-                  "h-11 rounded-xl px-4 text-sm font-semibold transition focus:outline-none focus:ring-4",
-                  disabled || !isDirty
-                    ? "cursor-not-allowed bg-white/10 text-white/40"
-                    : "bg-white text-slate-900 hover:brightness-95 focus:ring-white/20"
-                )}
+                className={`h-9 rounded-xl px-4 text-sm font-semibold transition ${
+                  !disabled && isDirty
+                    ? "bg-indigo-500 text-white hover:bg-indigo-400 shadow-[0_4px_14px_rgba(99,102,241,0.3)]"
+                    : "bg-white/[0.06] text-white/25"
+                }`}
               >
-                Save salary
+                Save settings
               </button>
-
-              <div className={cx("text-sm", muted)}>{disabledMsg}</div>
-            </div>
-          </div>
-
-          {/* Derived rates */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-5">
-            <div className="text-sm font-semibold text-white/90">
-              Derived rates
-            </div>
-            <div className={cx("mt-1 text-xs", muted2)}>
-              Auto-calculated from monthly salary and actual days.
-            </div>
-
-            <div className="mt-4 grid gap-2">
-              <RateRow label="Worked / day" value={`₹${money(perDay)}`} />
-              <RateRow label="Half-day" value={`₹${money(halfDay)}`} />
-              <RateRow label="Absent" value="₹0" />
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-white/85">OFF</div>
-
-                  <div className="text-sm font-extrabold text-white">
-                    ₹{money(perDay)}{" "}
-                    <span className="text-xs font-semibold text-white/45">
-                      (paid)
-                    </span>
-                  </div>
-                </div>
-
-                <div className={cx("mt-1 text-xs", muted2)}>
-                  {paidOffCount} paid, {unpaidOffCount} unpaid
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ✅ Deductions panel */}
-        <div
-          className={`mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-5 ${
-            enabled ? "" : "hidden"
-          }`}
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-white/90">
-                Deductions
-              </div>
-              <div className={cx("mt-1 text-xs", muted2)}>
-                Track advance money / deductions to subtract from payable.
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-white/5 px-3 py-2 text-[11px] font-semibold text-white/70 ring-1 ring-white/10">
-              Total: ₹{money(deductionsTotal)}
-            </div>
-          </div>
-
-          {/* Add row */}
-          <div className="mt-4 grid gap-3 lg:grid-cols-[220px_1fr_260px]">
-            {/* Date */}
-            <label className="grid gap-2">
-              <span className="text-sm font-semibold text-white/70">Date</span>
-              <input
-                type="date"
-                value={deductDate}
-                onChange={(e) => setDeductDate(e.target.value)}
-                className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white/90 outline-none transition focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/15"
-              />
-            </label>
-
-            {/* Note */}
-            <label className="grid gap-2 min-w-0">
-              <span className="text-sm font-semibold text-white/70">Note</span>
-              <input
-                value={deductNote}
-                onChange={(e) => setDeductNote(e.target.value)}
-                placeholder="e.g., advance / festival / groceries"
-                className="h-11 w-full min-w-0 rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white/90 placeholder:text-white/30 outline-none transition focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/15"
-              />
-            </label>
-
-            {/* Amount + Add */}
-            <div className="grid gap-2">
-              <span className="text-sm font-semibold text-white/70">
-                Amount (₹)
+              <span className="text-xs text-white/30">
+                {disabled ? "Month is locked" : isDirty ? "You have unsaved changes" : "Settings saved"}
               </span>
-
-              <div className="flex w-full min-w-[240px] items-stretch gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={deductAmount}
-                  onChange={(e) => setDeductAmount(e.target.value)}
-                  placeholder="e.g., 500"
-                  className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white/90 placeholder:text-white/30 outline-none transition focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/15"
-                />
-
-                <button
-                  type="button"
-                  onClick={handleAddDeduction}
-                  disabled={disabled || !canAddDeduction}
-                  className={[
-                    "h-11 shrink-0 rounded-xl px-5 text-sm font-semibold transition",
-                    disabled || !canAddDeduction
-                      ? "cursor-not-allowed bg-white/10 text-white/40"
-                      : "bg-white text-slate-900 hover:brightness-95",
-                  ].join(" ")}
-                >
-                  Add
-                </button>
-              </div>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Hint if parent not wired */}
-          {!canAddDeductionHandler ? (
-            <div className="mt-3 text-xs text-amber-200/80">
-              Deductions UI is visible, but add/delete handlers are not wired
-              from parent yet (no crash — just disabled).
-            </div>
-          ) : null}
+      {/* ── Deductions ── */}
+      <div className="px-5 py-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-sm font-medium text-white/60">Deductions</div>
+          {deductionsTotal > 0 && (
+            <span className="text-xs font-semibold text-rose-400">−₹{money(deductionsTotal)}</span>
+          )}
+        </div>
 
-          {/* List */}
-          <div className="mt-4">
-            {safeDeductions.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-sm text-white/60">
-                No deductions added for this month.
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                {safeDeductions.map((d) => (
-                  <div
-                    key={d.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <div className="text-sm font-semibold text-white/85">
-                          ₹{money(d.amount)}
-                        </div>
-                        <span className="text-white/20">•</span>
-                        <div className="text-xs text-white/55">{d.dateISO}</div>
-                        {d.note ? (
-                          <>
-                            <span className="text-white/20">•</span>
-                            <div className="text-xs text-white/60 truncate max-w-[520px]">
-                              {d.note}
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
+        {/* Add row */}
+        {!disabled && onAddDeduction && (
+          <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_160px_auto]">
+            <input
+              value={deductNote}
+              onChange={(e) => setDeductNote(e.target.value)}
+              placeholder="Note (e.g. advance, festival)"
+              className="h-9 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/10"
+            />
+            <input
+              type="number" min={0} step={1}
+              value={deductAmount}
+              onChange={(e) => setDeductAmount(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAddDeduction(); }}
+              placeholder="Amount (₹)"
+              className="h-9 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/10"
+            />
+            <button
+              type="button"
+              onClick={handleAddDeduction}
+              disabled={!canAddDeduction}
+              className={`h-9 rounded-xl px-4 text-sm font-semibold transition whitespace-nowrap ${
+                canAddDeduction ? "bg-white/[0.08] text-white hover:bg-white/[0.12]" : "bg-white/[0.04] text-white/25"
+              }`}
+            >
+              + Add
+            </button>
+          </div>
+        )}
 
-                    <button
-                      type="button"
-                      disabled={disabled || !canDeleteDeductionHandler}
-                      onClick={() => handleDeleteDeduction(d.id)}
-                      className={cx(
-                        "h-9 rounded-xl px-3 text-xs font-semibold transition focus:outline-none focus:ring-4",
-                        disabled || !canDeleteDeductionHandler
-                          ? "cursor-not-allowed bg-white/10 text-white/40"
-                          : "bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 focus:ring-rose-500/30"
-                      )}
-                      title={
-                        disabled
-                          ? "Month is locked"
-                          : !canDeleteDeductionHandler
-                          ? "Delete handler not wired"
-                          : "Delete deduction"
-                      }
-                    >
-                      Delete
-                    </button>
+        {/* List */}
+        {safeDeductions.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-white/[0.08] py-4 text-center text-xs text-white/25">
+            No deductions for {monthKey}
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {safeDeductions.map((d) => (
+              <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="text-sm font-semibold text-rose-300">−₹{money(d.amount)}</span>
+                    {d.note && <span className="text-xs text-white/50 truncate">{d.note}</span>}
+                    <span className="text-[11px] text-white/25">{d.dateISO}</span>
                   </div>
-                ))}
+                </div>
+                {!disabled && onDeleteDeduction && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteDeduction(d.id)}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white/25 hover:bg-rose-500/15 hover:text-rose-400 transition text-sm"
+                    title="Remove deduction"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
-            )}
+            ))}
           </div>
-        </div>
-
-        {/* Breakdown tiles */}
-        <div className="mt-5 grid grid-cols-1 gap-3 grid-cols-2 lg:grid-cols-4">
-          <BreakTile
-            title="Worked"
-            subtitle={`${totals.worked} × ₹${money(perDay)}`}
-            amount={`₹${money(workedAmt)}`}
-            tone="emerald"
-          />
-          <BreakTile
-            title="Half"
-            subtitle={`${totals.half} × ₹${money(halfDay)}`}
-            amount={`₹${money(halfAmt)}`}
-            tone="amber"
-          />
-          <BreakTile
-            title="Absent"
-            subtitle={`${totals.absent} × ₹0`}
-            amount="₹0"
-            tone="rose"
-          />
-          <BreakTile
-            title="Off"
-            subtitle={`${paidOffCount} paid • ${unpaidOffCount} unpaid`}
-            amount={`₹${money(offAmt)}`}
-            tone="slate"
-          />
-        </div>
+        )}
       </div>
     </section>
-  );
-}
-
-function RateRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-      <div className="text-sm font-semibold text-white/80">{label}</div>
-      <div className="text-sm font-extrabold text-white">{value}</div>
-    </div>
-  );
-}
-
-function BreakTile({
-  title,
-  subtitle,
-  amount,
-  tone,
-}: {
-  title: string;
-  subtitle: string;
-  amount: string;
-  tone: "emerald" | "amber" | "rose" | "slate";
-}) {
-  const toneStyles: Record<typeof tone, { bar: string }> = {
-    emerald: { bar: "bg-emerald-400/70" },
-    amber: { bar: "bg-amber-400/70" },
-    rose: { bar: "bg-rose-400/70" },
-    slate: { bar: "bg-white/25" },
-  };
-
-  return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.25)]">
-      <div
-        className={cx("absolute left-0 top-0 h-full w-1", toneStyles[tone].bar)}
-      />
-      <div className="pl-2">
-        <div className="text-xs font-semibold text-white/60">{title}</div>
-        <div className="mt-1 text-sm font-semibold text-white/80">
-          {subtitle}
-        </div>
-        <div className="mt-3 text-2xl font-extrabold tracking-tight text-white">
-          {amount}
-        </div>
-      </div>
-    </div>
   );
 }

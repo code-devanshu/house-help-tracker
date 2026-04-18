@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 export function ShareButton({ onShare }: { onShare: () => Promise<void> }) {
-  const [status, setStatus] = useState<"idle" | "loading" | "copied">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "copied" | "error">("idle");
 
   const handleClick = async () => {
     if (status === "loading") return;
@@ -12,11 +12,10 @@ export function ShareButton({ onShare }: { onShare: () => Promise<void> }) {
       setStatus("loading");
       await onShare();
       setStatus("copied");
-
-      // reset after a moment
       setTimeout(() => setStatus("idle"), 1600);
     } catch {
-      setStatus("idle");
+      setStatus("error");
+      setTimeout(() => setStatus("idle"), 3000);
     }
   };
 
@@ -26,27 +25,28 @@ export function ShareButton({ onShare }: { onShare: () => Promise<void> }) {
       onClick={handleClick}
       className={`
         relative inline-flex items-center gap-2
-        rounded-xl border border-white/10
-        bg-white/[0.03] px-3 py-1.5
-        text-xs font-semibold text-white/80
+        rounded-xl border px-3 py-1.5
+        text-xs font-semibold
         transition
-        hover:bg-white/[0.06]
-        focus:outline-none focus:ring-4 focus:ring-white/15
+        focus:outline-none focus:ring-4
         disabled:opacity-60 disabled:cursor-not-allowed
+        ${status === "error"
+          ? "border-rose-500/40 bg-rose-500/10 text-rose-200 focus:ring-rose-500/20"
+          : "border-white/10 bg-white/[0.03] text-white/80 hover:bg-white/[0.06] focus:ring-white/15"
+        }
       `}
       disabled={status === "loading"}
     >
-      {/* Icon */}
       <span className="text-sm leading-none">
-        {status === "copied" ? "✓" : "🔗"}
+        {status === "copied" ? "✓" : status === "error" ? "✕" : "🔗"}
       </span>
-
-      {/* Label */}
       <span>
         {status === "loading"
           ? "Generating…"
           : status === "copied"
           ? "Link copied"
+          : status === "error"
+          ? "Failed — retry"
           : "Share"}
       </span>
     </button>

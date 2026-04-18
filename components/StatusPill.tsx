@@ -1,60 +1,24 @@
 import type { ShiftStatus } from "@/lib/storage/schema";
 
-const statusMeta: Record<
-  ShiftStatus,
-  { label: string; short: string; cls: string }
-> = {
-  WORKED: {
-    label: "Worked",
-    short: "W",
-    cls: "bg-green-100 text-green-800 border-green-200",
-  },
-  ABSENT: {
-    label: "Absent",
-    short: "A",
-    cls: "bg-red-100 text-red-800 border-red-200",
-  },
-  HALF: {
-    label: "Half",
-    short: "H",
-    cls: "bg-amber-100 text-amber-800 border-amber-200",
-  },
-  OFF: {
-    label: "Off",
-    short: "O",
-    cls: "bg-slate-100 text-slate-800 border-slate-200",
-  },
+const statusMeta: Record<ShiftStatus, { label: string; cls: string }> = {
+  WORKED: { label: "Worked", cls: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25" },
+  ABSENT: { label: "Absent", cls: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/25" },
+  HALF:   { label: "Half",   cls: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25" },
+  OFF:    { label: "Off",    cls: "bg-slate-500/15 text-slate-300 ring-1 ring-slate-500/25" },
 };
 
-export function StatusPill({
-  status,
-  compact = false,
-}: {
-  status: ShiftStatus;
-  compact?: boolean;
-}) {
+export function StatusPill({ status, compact = false }: { status: ShiftStatus; compact?: boolean }) {
   const meta = statusMeta[status];
-
   return (
     <span
       className={[
-        // allow shrinking inside flex containers
-        "min-w-0 max-w-full",
-        // visual
-        "inline-flex items-center justify-center rounded-full border font-semibold",
-        // responsive sizing
-        compact
-          ? "px-1.5 py-0.5 text-[10px] leading-none"
-          : "px-2 py-0.5 text-xs leading-none",
-        // critical: prevent overflow
-        "whitespace-nowrap overflow-hidden text-ellipsis",
+        "inline-flex items-center justify-center rounded-full font-semibold whitespace-nowrap",
+        compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs",
         meta.cls,
       ].join(" ")}
       title={meta.label}
     >
-      {/* On small screens show short label; on sm+ show full */}
-      <span className="sm:hidden">{compact ? meta.short : meta.label}</span>
-      <span className="hidden sm:inline">{meta.label}</span>
+      {meta.label}
     </span>
   );
 }
