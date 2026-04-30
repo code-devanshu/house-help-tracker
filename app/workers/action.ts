@@ -80,6 +80,5 @@ export async function syncAppData(
     return { ok: false, error: error.message };
   }
 
-  revalidatePath("/");
   return { ok: true, data: result };
 }

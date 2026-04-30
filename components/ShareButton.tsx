@@ -31,8 +31,8 @@ export function ShareButton({ onShare }: { onShare: () => Promise<void> }) {
         focus:outline-none focus:ring-4
         disabled:opacity-60 disabled:cursor-not-allowed
         ${status === "error"
-          ? "border-rose-500/40 bg-rose-500/10 text-rose-200 focus:ring-rose-500/20"
-          : "border-white/10 bg-white/[0.03] text-white/80 hover:bg-white/[0.06] focus:ring-white/15"
+          ? "border-rose-300 bg-rose-50 text-rose-600 focus:ring-rose-500/20 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200"
+          : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 focus:ring-slate-200 dark:border-white/10 dark:bg-white/3 dark:text-white/80 dark:hover:bg-white/6 dark:focus:ring-white/15"
         }
       `}
       disabled={status === "loading"}

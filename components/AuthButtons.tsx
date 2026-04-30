@@ -30,8 +30,8 @@ export function AuthButtons() {
   if (loading) {
     return (
       <div className="flex items-center gap-3">
-        <div className="h-9 w-9 animate-pulse rounded-full bg-white/10" />
-        <div className="h-4 w-28 animate-pulse rounded bg-white/10" />
+        <div className="h-9 w-9 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+        <div className="h-4 w-28 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
       </div>
     );
   }

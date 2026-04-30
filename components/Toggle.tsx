@@ -19,7 +19,7 @@ export function Toggle({ value, onChange, disabled = false }: ToggleProps) {
       {/* Track */}
       <span className={[
         "relative inline-block h-6 w-10 rounded-full border transition-colors duration-200",
-        "border-white/10 bg-white/[0.08]",
+        "border-slate-300 bg-slate-200 dark:border-white/10 dark:bg-white/8",
         "peer-checked:border-indigo-400/30 peer-checked:bg-indigo-500",
         "peer-focus-visible:ring-4 peer-focus-visible:ring-indigo-500/25",
         "peer-checked:[&_.thumb]:translate-x-4",

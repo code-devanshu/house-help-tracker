@@ -100,15 +100,15 @@ export default function WorkersPage() {
         {/* Row 1: Title + Add button */}
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-white">Workers</h1>
-            <p className="mt-0.5 text-sm text-white/45">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Workers</h1>
+            <p className="mt-0.5 text-sm text-slate-500 dark:text-white/45">
               {initialLoading ? "Loading…" : `${activeWorkers.length} active${archivedWorkers.length ? ` · ${archivedWorkers.length} archived` : ""}`}
             </p>
           </div>
 
           <div className="flex items-center gap-2.5">
             {/* Sync indicator — desktop only */}
-            <div className={`hidden items-center gap-1.5 text-xs sm:flex ${isPending ? "text-amber-400" : "text-white/30"}`}>
+            <div className={`hidden items-center gap-1.5 text-xs sm:flex ${isPending ? "text-amber-400" : "text-slate-400 dark:text-white/30"}`}>
               <span className={`h-1.5 w-1.5 rounded-full ${isPending ? "bg-amber-400 animate-pulse" : "bg-green-500"}`} />
               {isPending ? "Syncing…" : "Synced"}
             </div>
@@ -127,36 +127,36 @@ export default function WorkersPage() {
       </div>
 
       {/* ── Workers list ── */}
-      <div className="rounded-2xl border border-white/[0.07] bg-white/2.5 shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] dark:border-white/7 dark:bg-white/2.5 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
         {initialLoading ? (
-          <div className="divide-y divide-white/6">
+          <div className="divide-y divide-slate-100 dark:divide-white/6">
             {[1, 2, 3].map((i) => (
               <div key={i} className="flex items-center gap-4 px-5 py-4">
-                <div className="h-10 w-10 rounded-xl bg-white/6 animate-pulse" />
+                <div className="h-10 w-10 rounded-xl bg-slate-100 animate-pulse dark:bg-white/6" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-3.5 w-32 rounded-md bg-white/6 animate-pulse" />
-                  <div className="h-2.5 w-20 rounded-md bg-white/4 animate-pulse" />
+                  <div className="h-3.5 w-32 rounded-md bg-slate-100 animate-pulse dark:bg-white/6" />
+                  <div className="h-2.5 w-20 rounded-md bg-slate-100 animate-pulse dark:bg-white/4" />
                 </div>
-                <div className="h-4 w-16 rounded-md bg-white/6 animate-pulse" />
+                <div className="h-4 w-16 rounded-md bg-slate-100 animate-pulse dark:bg-white/6" />
               </div>
             ))}
           </div>
         ) : activeWorkers.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 text-2xl">👥</div>
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl dark:bg-white/5">👥</div>
             <div>
-              <div className="text-sm font-medium text-white/60">No workers yet</div>
-              <div className="mt-1 text-xs text-white/30">Add your first worker to start tracking attendance.</div>
+              <div className="text-sm font-medium text-slate-500 dark:text-white/60">No workers yet</div>
+              <div className="mt-1 text-xs text-slate-400 dark:text-white/30">Add your first worker to start tracking attendance.</div>
             </div>
             <button
               onClick={() => setAddOpen(true)}
-              className="mt-1 inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-500/15 px-3 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/25 transition"
+              className="mt-1 inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-50 px-3 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 transition dark:bg-indigo-500/15 dark:text-indigo-400 dark:hover:bg-indigo-500/25"
             >
               <span>+</span> Add worker
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-white/6">
+          <div className="divide-y divide-slate-100 dark:divide-white/6">
             {activeWorkers.map((worker) => (
               <WorkerRow
                 key={worker.id}
@@ -170,30 +170,30 @@ export default function WorkersPage() {
 
       {/* ── Archived section ── */}
       {!initialLoading && archivedWorkers.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-white/6 bg-white/1.5">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 dark:border-white/6 dark:bg-white/1.5">
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
-            className="flex w-full items-center justify-between px-5 py-3.5 text-sm transition hover:bg-white/2"
+            className="flex w-full items-center justify-between px-5 py-3.5 text-sm transition hover:bg-slate-100 dark:hover:bg-white/2"
           >
-            <div className="flex items-center gap-2 text-white/40 font-medium">
+            <div className="flex items-center gap-2 text-slate-400 font-medium dark:text-white/40">
               <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
                 <path d="M2 4h12v2H2V4zM3 7h10l-1 6H4L3 7z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
               </svg>
               Archived
-              <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[11px]">{archivedWorkers.length}</span>
+              <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[11px] dark:bg-white/10">{archivedWorkers.length}</span>
             </div>
-            <span className={`text-white/25 text-xs transition-transform duration-200 ${showArchived ? "rotate-180" : ""}`}>▼</span>
+            <span className={`text-slate-300 text-xs transition-transform duration-200 dark:text-white/25 ${showArchived ? "rotate-180" : ""}`}>▼</span>
           </button>
 
           {showArchived && (
-            <div className="divide-y divide-white/5 border-t border-white/6">
+            <div className="divide-y divide-slate-100 border-t border-slate-200 dark:divide-white/5 dark:border-white/6">
               {archivedWorkers.map((w) => (
                 <div key={w.id} className="flex items-center gap-3 px-4 py-3.5 opacity-60 hover:opacity-90 transition sm:px-5">
                   <WorkerAvatar name={w.name} muted />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-white/70">{w.name}</div>
-                    <div className="text-xs text-white/30">Archived {w.archivedAt ? timeAgo(w.archivedAt) : ""}</div>
+                    <div className="truncate text-sm font-medium text-slate-700 dark:text-white/70">{w.name}</div>
+                    <div className="text-xs text-slate-400 dark:text-white/30">Archived {w.archivedAt ? timeAgo(w.archivedAt) : ""}</div>
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <button onClick={() => handleRestore(w)} className="h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition">
@@ -214,30 +214,30 @@ export default function WorkersPage() {
       {addOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-4 sm:items-center sm:pb-0" onMouseDown={(e) => { if (e.target === e.currentTarget) setAddOpen(false); }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0D1117] shadow-[0_24px_64px_rgba(0,0,0,0.7)]">
-            <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-[0_24px_64px_rgba(0,0,0,0.12)] dark:border-white/10 dark:bg-[#0D1117] dark:shadow-[0_24px_64px_rgba(0,0,0,0.7)]">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-white/7">
               <div>
-                <div className="text-sm font-semibold text-white">New worker</div>
-                <div className="mt-0.5 text-xs text-white/40">Add a worker to start tracking.</div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">New worker</div>
+                <div className="mt-0.5 text-xs text-slate-500 dark:text-white/40">Add a worker to start tracking.</div>
               </div>
-              <button onClick={() => setAddOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 hover:bg-white/6 hover:text-white/70 transition text-lg leading-none">×</button>
+              <button onClick={() => setAddOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition text-lg leading-none dark:text-white/40 dark:hover:bg-white/6 dark:hover:text-white/70">×</button>
             </div>
             <div className="px-5 py-5 space-y-4">
               <label className="grid gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-white/40">Name</span>
-                <input autoFocus value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setAddOpen(false); }} placeholder="e.g. Sunita Devi" className="h-11 rounded-xl border border-white/10 bg-white/4 px-4 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-indigo-400/60 focus:ring-4 focus:ring-indigo-500/10" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/40">Name</span>
+                <input autoFocus value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setAddOpen(false); }} placeholder="e.g. Sunita Devi" className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/4 dark:text-white dark:placeholder:text-white/25" />
               </label>
               <label className="grid gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-white/40">Shift label <span className="normal-case font-normal tracking-normal text-white/25">(optional)</span></span>
-                <input value={draft.defaultShiftLabel} onChange={(e) => setDraft((d) => ({ ...d, defaultShiftLabel: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setAddOpen(false); }} placeholder="e.g. Morning shift" className="h-11 rounded-xl border border-white/10 bg-white/4 px-4 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-indigo-400/60 focus:ring-4 focus:ring-indigo-500/10" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/40">Shift label <span className="normal-case font-normal tracking-normal text-slate-400 dark:text-white/25">(optional)</span></span>
+                <input value={draft.defaultShiftLabel} onChange={(e) => setDraft((d) => ({ ...d, defaultShiftLabel: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setAddOpen(false); }} placeholder="e.g. Morning shift" className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/4 dark:text-white dark:placeholder:text-white/25" />
               </label>
               <label className="grid gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-white/40">Start date <span className="normal-case font-normal tracking-normal text-white/25">(optional)</span></span>
-                <input type="date" value={draft.startDate} onChange={(e) => setDraft((d) => ({ ...d, startDate: e.target.value }))} className="h-11 rounded-xl border border-white/10 bg-white/4 px-4 text-sm text-white outline-none transition focus:border-indigo-400/60 focus:ring-4 focus:ring-indigo-500/10 scheme-dark" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/40">Start date <span className="normal-case font-normal tracking-normal text-slate-400 dark:text-white/25">(optional)</span></span>
+                <input type="date" value={draft.startDate} onChange={(e) => setDraft((d) => ({ ...d, startDate: e.target.value }))} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 scheme-dark dark:border-white/10 dark:bg-white/4 dark:text-white" />
               </label>
               <div className="flex gap-3 pt-1">
-                <button onClick={() => setAddOpen(false)} className="h-11 flex-1 rounded-xl border border-white/10 bg-white/4 text-sm font-medium text-white/60 hover:bg-white/[0.07] transition">Cancel</button>
-                <button type="button" onClick={handleAdd} disabled={!canAdd || isPending} className={`h-11 flex-1 rounded-xl text-sm font-semibold transition ${canAdd ? "bg-indigo-500 text-white hover:bg-indigo-400 shadow-[0_4px_14px_rgba(99,102,241,0.35)]" : "bg-white/6 text-white/25"}`}>Add worker</button>
+                <button onClick={() => setAddOpen(false)} className="h-11 flex-1 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-500 hover:bg-slate-100 transition dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:bg-white/7">Cancel</button>
+                <button type="button" onClick={handleAdd} disabled={!canAdd || isPending} className={`h-11 flex-1 rounded-xl text-sm font-semibold transition ${canAdd ? "bg-indigo-500 text-white hover:bg-indigo-400 shadow-[0_4px_14px_rgba(99,102,241,0.35)]" : "bg-slate-100 text-slate-300 dark:bg-white/6 dark:text-white/25"}`}>Add worker</button>
               </div>
             </div>
           </div>
@@ -247,21 +247,21 @@ export default function WorkersPage() {
       {/* ── Delete Modal ── */}
       {deleteModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onMouseDown={(e) => { if (e.target === e.currentTarget) closeDeleteModal(); }}>
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          <div className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-[#0D1117] shadow-[0_24px_64px_rgba(0,0,0,0.7)]">
-            <div className="border-b border-white/[0.07] px-5 py-4">
-              <div className="text-sm font-semibold text-white">Delete permanently</div>
-              <div className="mt-0.5 text-xs text-white/40">This removes all attendance, salary, and deduction data.</div>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm dark:bg-black/70" />
+          <div className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-[0_24px_64px_rgba(0,0,0,0.12)] dark:border-white/10 dark:bg-[#0D1117] dark:shadow-[0_24px_64px_rgba(0,0,0,0.7)]">
+            <div className="border-b border-slate-100 px-5 py-4 dark:border-white/7">
+              <div className="text-sm font-semibold text-slate-900 dark:text-white">Delete permanently</div>
+              <div className="mt-0.5 text-xs text-slate-500 dark:text-white/40">This removes all attendance, salary, and deduction data.</div>
             </div>
             <div className="px-5 py-5 space-y-4">
               <div className="rounded-xl border border-rose-500/20 bg-rose-500/8 px-4 py-3">
-                <div className="text-xs text-rose-300/70">Type to confirm:</div>
-                <div className="mt-1 text-sm font-semibold text-white">{deleteModal.workerName}</div>
+                <div className="text-xs text-rose-600 dark:text-rose-300/70">Type to confirm:</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{deleteModal.workerName}</div>
               </div>
-              <input autoFocus value={deleteModal.typed} onChange={(e) => setDeleteModal((m) => ({ ...m, typed: e.target.value }))} onKeyDown={(e) => { if (e.key === "Escape") closeDeleteModal(); if (e.key === "Enter") confirmDeleteModal(); }} placeholder="Type name here" className="h-11 w-full rounded-xl border border-white/10 bg-white/4 px-4 text-sm text-white placeholder:text-white/20 outline-none focus:border-rose-400/40 focus:ring-4 focus:ring-rose-500/10" />
+              <input autoFocus value={deleteModal.typed} onChange={(e) => setDeleteModal((m) => ({ ...m, typed: e.target.value }))} onKeyDown={(e) => { if (e.key === "Escape") closeDeleteModal(); if (e.key === "Enter") confirmDeleteModal(); }} placeholder="Type name here" className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-rose-400 focus:ring-4 focus:ring-rose-500/10 dark:border-white/10 dark:bg-white/4 dark:text-white dark:placeholder:text-white/20" />
               <div className="flex gap-3">
-                <button onClick={closeDeleteModal} className="h-10 flex-1 rounded-xl border border-white/10 bg-white/4 text-sm font-medium text-white/60 hover:bg-white/[0.07] transition">Cancel</button>
-                <button onClick={confirmDeleteModal} disabled={deleteModal.typed.trim().toLowerCase() !== deleteModal.workerName.trim().toLowerCase() || isPending} className={`h-10 flex-1 rounded-xl text-sm font-semibold transition ${deleteModal.typed.trim().toLowerCase() === deleteModal.workerName.trim().toLowerCase() && !isPending ? "bg-rose-500 text-white hover:bg-rose-400" : "bg-white/6 text-white/25"}`}>Delete permanently</button>
+                <button onClick={closeDeleteModal} className="h-10 flex-1 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:bg-white/7">Cancel</button>
+                <button onClick={confirmDeleteModal} disabled={deleteModal.typed.trim().toLowerCase() !== deleteModal.workerName.trim().toLowerCase() || isPending} className={`h-10 flex-1 rounded-xl text-sm font-semibold transition ${deleteModal.typed.trim().toLowerCase() === deleteModal.workerName.trim().toLowerCase() && !isPending ? "bg-rose-500 text-white hover:bg-rose-400" : "bg-slate-100 text-slate-300 dark:bg-white/6 dark:text-white/25"}`}>Delete permanently</button>
               </div>
             </div>
           </div>
@@ -293,17 +293,17 @@ function WorkerAvatar({ name, muted = false }: { name: string; muted?: boolean }
 
 function WorkerRow({ worker, onArchive }: { worker: Worker; onArchive: () => void }) {
   return (
-    <div className="group relative flex items-center gap-3 px-4 py-4 transition hover:bg-white/2.5 sm:px-5">
+    <div className="group relative flex items-center gap-3 px-4 py-4 transition hover:bg-slate-50 sm:px-5 dark:hover:bg-white/2.5">
       <Link href={`/workers/${worker.id}`} className="absolute inset-0 z-0" aria-label={`Open ${worker.name}`} />
 
       <WorkerAvatar name={worker.name} />
 
       <div className="relative z-10 min-w-0 flex-1 pointer-events-none select-none">
-        <div className="truncate text-sm font-semibold text-white/90">{worker.name}</div>
+        <div className="truncate text-sm font-semibold text-slate-900 dark:text-white/90">{worker.name}</div>
         {(worker.defaultShiftLabel || worker.startDate) && (
-          <div className="mt-0.5 flex items-center gap-2 text-xs text-white/35">
+          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400 dark:text-white/35">
             {worker.defaultShiftLabel && <span>{worker.defaultShiftLabel}</span>}
-            {worker.defaultShiftLabel && worker.startDate && <span className="text-white/15">·</span>}
+            {worker.defaultShiftLabel && worker.startDate && <span className="text-slate-200 dark:text-white/15">·</span>}
             {worker.startDate && <span>Since {worker.startDate}</span>}
           </div>
         )}
@@ -312,7 +312,7 @@ function WorkerRow({ worker, onArchive }: { worker: Worker; onArchive: () => voi
       <div className="relative z-10 flex shrink-0 items-center gap-2">
         <button
           onClick={(e) => { e.stopPropagation(); onArchive(); }}
-          className="flex h-8 items-center rounded-lg border border-white/10 px-2.5 text-xs font-medium text-white/40 transition hover:border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-300 sm:hidden"
+          className="flex h-8 items-center rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-500 transition hover:border-amber-400/50 hover:bg-amber-50 hover:text-amber-600 sm:hidden dark:border-white/10 dark:text-white/40 dark:hover:border-amber-500/30 dark:hover:bg-amber-500/10 dark:hover:text-amber-300"
         >
           Archive
         </button>
@@ -321,7 +321,7 @@ function WorkerRow({ worker, onArchive }: { worker: Worker; onArchive: () => voi
           <button
             onClick={(e) => { e.stopPropagation(); onArchive(); }}
             title="Archive"
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-white/35 hover:border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-300 transition"
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-amber-400/50 hover:bg-amber-50 hover:text-amber-600 transition dark:border-white/10 dark:text-white/35 dark:hover:border-amber-500/30 dark:hover:bg-amber-500/10 dark:hover:text-amber-300"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
               <path d="M2 4h12v2H2V4z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
@@ -331,7 +331,7 @@ function WorkerRow({ worker, onArchive }: { worker: Worker; onArchive: () => voi
           </button>
           <Link
             href={`/workers/${worker.id}`}
-            className="inline-flex h-7 items-center rounded-lg border border-white/10 bg-white/4 px-3 text-xs font-semibold text-white/60 hover:bg-white hover:text-slate-900 transition"
+            className="inline-flex h-7 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-900 hover:text-white transition dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:bg-white dark:hover:text-slate-900"
           >
             Open →
           </Link>

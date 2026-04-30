@@ -32,15 +32,15 @@ const icons: Record<ToastType, string> = {
 };
 
 const styles: Record<ToastType, string> = {
-  error: "border-rose-500/40 bg-rose-500/15 text-rose-100",
-  success: "border-emerald-500/40 bg-emerald-500/15 text-emerald-100",
-  info: "border-white/15 bg-white/[0.07] text-white/90",
+  error: "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/15 dark:text-rose-100",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-100",
+  info: "border-slate-200 bg-white text-slate-800 dark:border-white/15 dark:bg-white/7 dark:text-white/90",
 };
 
 const iconStyles: Record<ToastType, string> = {
-  error: "bg-rose-500/20 text-rose-300",
-  success: "bg-emerald-500/20 text-emerald-300",
-  info: "bg-white/10 text-white/60",
+  error: "bg-rose-100 text-rose-500 dark:bg-rose-500/20 dark:text-rose-300",
+  success: "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300",
+  info: "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-white/60",
 };
 
 export function ToastContainer() {
@@ -55,7 +55,7 @@ export function ToastContainer() {
   if (list.length === 0) return null;
 
   return (
-    <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+    <div className="fixed bottom-5 right-5 z-9999 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
       {list.map((t) => (
         <div
           key={t.id}

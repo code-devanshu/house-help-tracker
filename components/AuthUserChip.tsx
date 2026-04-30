@@ -75,21 +75,20 @@ export function AuthUserChip({ image, name, email, initials, signOut }: Props) {
 
       {/* Dropdown Menu */}
       {open && (
-        <div className="absolute right-0 top-12 z-[1000] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#0B1020]/95 shadow-[0_25px_70px_rgba(0,0,0,0.65)] backdrop-blur-xl">
-          <div className="border-b border-white/10 px-4 py-3">
-            <div className="truncate text-sm font-semibold text-white/90">
+        <div className="absolute right-0 top-12 z-1000 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_25px_70px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-[#0B1020]/95 dark:shadow-[0_25px_70px_rgba(0,0,0,0.65)]">
+          <div className="border-b border-slate-100 px-4 py-3 dark:border-white/10">
+            <div className="truncate text-sm font-semibold text-slate-900 dark:text-white/90">
               {name ?? "Signed in"}
             </div>
-            <div className="mt-0.5 truncate text-[11px] text-white/45">
+            <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-white/45">
               {email}
             </div>
           </div>
 
           <button
             type="button"
-            // Use onPointerDown to capture the event before the 'outside click' listener closes the menu
             onPointerDown={handleSignOut}
-            className="w-full cursor-pointer px-4 py-3 text-left text-sm font-semibold text-rose-300 transition hover:bg-white/5 focus:outline-none"
+            className="w-full cursor-pointer px-4 py-3 text-left text-sm font-semibold text-rose-500 transition hover:bg-slate-50 focus:outline-none dark:text-rose-300 dark:hover:bg-white/5"
           >
             Logout
           </button>

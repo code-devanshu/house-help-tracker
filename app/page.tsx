@@ -2,7 +2,7 @@ import GoogleSSOButton from "@/components/GoogleSSOButton";
 
 export default function HomePage() {
   return (
-    <main className="relative min-h-screen overflow-hidden text-white">
+    <main className="relative min-h-screen overflow-hidden text-slate-900 dark:text-white">
       {/* Ambient gradient orbs */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-indigo-600/10 blur-[100px]" />
@@ -15,20 +15,20 @@ export default function HomePage() {
         {/* ── Left: Value prop ── */}
         <section className="flex-1 max-w-2xl">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-500/10 px-3.5 py-1.5 text-xs font-medium text-indigo-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shadow-[0_0_6px_2px_rgba(99,102,241,0.6)]" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3.5 py-1.5 text-xs font-medium text-indigo-600 dark:border-indigo-400/20 dark:text-indigo-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 shadow-[0_0_6px_2px_rgba(99,102,241,0.4)] dark:bg-indigo-400 dark:shadow-[0_0_6px_2px_rgba(99,102,241,0.6)]" />
             Private · Offline-first · Auto-synced
           </div>
 
           {/* Headline */}
-          <h1 className="mt-6 text-5xl font-bold tracking-tight text-white sm:text-6xl lg:text-[64px] lg:leading-[1.08]">
+          <h1 className="mt-6 text-5xl font-bold tracking-tight text-slate-900 sm:text-6xl lg:text-[64px] lg:leading-[1.08] dark:text-white">
             Pay your house help{" "}
-            <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-cyan-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-indigo-500 via-violet-500 to-cyan-500 bg-clip-text text-transparent dark:from-indigo-400 dark:via-violet-400 dark:to-cyan-400">
               correctly, every time.
             </span>
           </h1>
 
-          <p className="mt-5 max-w-lg text-lg leading-relaxed text-white/55">
+          <p className="mt-5 max-w-lg text-lg leading-relaxed text-slate-600 dark:text-white/55">
             Track attendance, calculate salaries automatically, lock months after payout — no spreadsheets, no mental math.
           </p>
 
@@ -44,7 +44,7 @@ export default function HomePage() {
             ].map(({ icon, label }) => (
               <div
                 key={label}
-                className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-3.5 py-2 text-sm text-white/70"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3.5 py-2 text-sm text-slate-600 dark:border-white/8 dark:bg-white/4 dark:text-white/70"
               >
                 <span className="text-base leading-none">{icon}</span>
                 {label}
@@ -53,16 +53,16 @@ export default function HomePage() {
           </div>
 
           {/* Social proof */}
-          <p className="mt-8 text-sm text-white/30">
+          <p className="mt-8 text-sm text-slate-400 dark:text-white/30">
             Works for maids, cooks, drivers, gardeners, and more.
           </p>
         </section>
 
         {/* ── Right: Sign-in card ── */}
         <section className="mt-12 w-full max-w-sm lg:mt-0 lg:shrink-0">
-          <div className="relative rounded-3xl border border-white/10 bg-white/[0.04] p-7 shadow-[0_32px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+          <div className="relative rounded-3xl border border-slate-200 bg-white p-7 shadow-[0_32px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-white/4 dark:shadow-[0_32px_80px_rgba(0,0,0,0.6)]">
             {/* Subtle inner glow */}
-            <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-b from-white/[0.05] to-transparent" />
+            <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-b from-slate-50/80 to-transparent dark:from-white/5" />
 
             <div className="relative">
               {/* App icon */}
@@ -70,8 +70,8 @@ export default function HomePage() {
                 <span className="text-xl">🏠</span>
               </div>
 
-              <h2 className="text-xl font-semibold text-white">Get started</h2>
-              <p className="mt-1.5 text-sm text-white/50">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Get started</h2>
+              <p className="mt-1.5 text-sm text-slate-500 dark:text-white/50">
                 Sign in with Google. Your data stays private.
               </p>
 
@@ -84,8 +84,8 @@ export default function HomePage() {
                   "Your data encrypted & private",
                   "Works offline, syncs automatically",
                 ].map((item) => (
-                  <div key={item} className="flex items-center gap-2.5 text-xs text-white/40">
-                    <svg className="h-3.5 w-3.5 shrink-0 text-emerald-400" viewBox="0 0 12 12" fill="none">
+                  <div key={item} className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-white/40">
+                    <svg className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" viewBox="0 0 12 12" fill="none">
                       <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     {item}
