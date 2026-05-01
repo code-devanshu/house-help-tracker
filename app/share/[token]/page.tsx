@@ -199,15 +199,47 @@ export default async function ShareWorkerPage({ params, searchParams }: PageProp
   if (!worker) return <ErrorPage lang={lang} reason="notfound" />;
 
   /* ── Data ── */
-  const entries = app.entries.filter((e) => e.workerId === worker.id);
-  const cfg = app.salaryConfigs.find((s) => s.workerId === worker.id && s.monthKey === monthKey) as SalaryConfig | undefined;
-  const savedMonthlySalary = pickNum(cfg, ["monthlySalary", "salary"], 0);
-  const savedPaidOffAllowance = pickNum(cfg, ["paidOffAllowance", "paidOff", "offAllowance", "paidOffDays"], 0);
-  const deductions = app.deductions.filter((d) => d.workerId === worker.id && d.monthKey === monthKey);
-  const monthData = buildMonthData(entries, monthKey);
-  const salary = calculateSalary({ monthKey, totals: monthData.totals, savedMonthlySalary, savedPaidOffAllowance, deductions: deductions as Deduction[] });
   const daysInMonth = daysInMonthFromKey(monthKey);
-  const perDay = daysInMonth > 0 ? savedMonthlySalary / daysInMonth : 0;
+  const isGrouped = !!worker.personId;
+  const groupMembers = isGrouped
+    ? app.workers.filter((w) => w.personId === worker.personId)
+    : [worker];
+
+  // Per-role data (deductions excluded here — pooled at group level below)
+  const roles = groupMembers.map((member) => {
+    const memberEntries = app.entries.filter((e) => e.workerId === member.id);
+    const memberCfg = app.salaryConfigs.find(
+      (s) => s.workerId === member.id && s.monthKey === monthKey,
+    ) as SalaryConfig | undefined;
+    const memberSavedSalary = pickNum(memberCfg, ["monthlySalary", "salary"], 0);
+    const memberSavedOff = pickNum(memberCfg, ["paidOffAllowance", "paidOff", "offAllowance", "paidOffDays"], 0);
+    const memberMonthData = buildMonthData(memberEntries, monthKey);
+    const memberPerDay = daysInMonth > 0 ? memberSavedSalary / daysInMonth : 0;
+    const memberSalary = calculateSalary({
+      monthKey,
+      totals: memberMonthData.totals,
+      savedMonthlySalary: memberSavedSalary,
+      savedPaidOffAllowance: memberSavedOff,
+      deductions: [],
+    });
+    return { worker: member, monthData: memberMonthData, salary: memberSalary, perDay: memberPerDay };
+  });
+
+  // Pool all deductions across the group
+  const allGroupDeductions = app.deductions.filter(
+    (d) => groupMembers.some((m) => m.id === d.workerId) && d.monthKey === monthKey,
+  ) as Deduction[];
+  const groupGross = roles.reduce((s, r) => s + r.salary.grossPayable, 0);
+  const groupDeductionsTotal = allGroupDeductions.reduce((s, d) => {
+    const a = Number(d.amount);
+    return s + (Number.isFinite(a) && a > 0 ? a : 0);
+  }, 0);
+  const groupNetPayable = Math.max(0, groupGross - groupDeductionsTotal);
+
+  // Aliases for solo worker (first role = only role)
+  const primaryRole = roles[0]!;
+  const monthData = primaryRole.monthData;
+  const perDay = primaryRole.perDay;
 
   /* ── Avatar color ── */
   const hue = worker.name.charCodeAt(0) % 6;
@@ -246,18 +278,23 @@ export default async function ShareWorkerPage({ params, searchParams }: PageProp
           </div>
 
           {/* Net pay display */}
-          <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] p-4">
+          <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/7 p-4">
             <div className="text-xs font-medium text-emerald-400/70">{t.youWillGet}</div>
             <div className="mt-1 text-4xl font-bold tracking-tight text-emerald-300">
-              ₹{money(salary.netPayable)}
+              ₹{money(groupNetPayable)}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
-              <span>{t.gross} ₹{money(salary.grossPayable)}</span>
-              {salary.deductionsTotal > 0 && (
+              <span>{t.gross} ₹{money(groupGross)}</span>
+              {groupDeductionsTotal > 0 && (
                 <>
                   <span>·</span>
-                  <span className="text-rose-400/70">{t.deductions} −₹{money(salary.deductionsTotal)}</span>
+                  <span className="text-rose-400/70">{t.deductions} −₹{money(groupDeductionsTotal)}</span>
                 </>
+              )}
+              {isGrouped && (
+                <span className="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-2 py-0.5 text-[10px] text-indigo-300">
+                  {roles.length} roles
+                </span>
               )}
             </div>
           </div>
@@ -273,44 +310,79 @@ export default async function ShareWorkerPage({ params, searchParams }: PageProp
         </div>
 
         {/* ── Attendance stats ── */}
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
+        <div className="rounded-2xl border border-white/[0.07] bg-white/2.5 p-5">
           <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/35">{t.attendance}</div>
-          <div className="grid grid-cols-4 gap-2">
-            {[
-              { label: t.worked, value: monthData.totals.worked, cls: "text-emerald-300", bg: "bg-emerald-500/10 border-emerald-500/20" },
-              { label: t.half,   value: monthData.totals.half,   cls: "text-amber-300",   bg: "bg-amber-500/10 border-amber-500/20" },
-              { label: t.off,    value: monthData.totals.off,    cls: "text-sky-300",     bg: "bg-sky-500/10 border-sky-500/20" },
-              { label: t.absent, value: monthData.totals.absent, cls: "text-rose-300",    bg: "bg-rose-500/10 border-rose-500/20" },
-            ].map((s) => (
-              <div key={s.label} className={`rounded-xl border p-3 text-center ${s.bg}`}>
-                <div className={`text-2xl font-bold ${s.cls}`}>{s.value}</div>
-                <div className="mt-1 text-[10px] font-medium text-white/40 leading-tight">{s.label}</div>
-              </div>
-            ))}
-          </div>
+          {isGrouped ? (
+            <div className="space-y-3">
+              {roles.map((role) => (
+                <div key={role.worker.id}>
+                  {roles.length > 1 && (
+                    <div className="mb-1.5 text-[11px] font-medium text-white/35">{role.worker.name}</div>
+                  )}
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { label: t.worked, value: role.monthData.totals.worked, cls: "text-emerald-300", bg: "bg-emerald-500/10 border-emerald-500/20" },
+                      { label: t.half,   value: role.monthData.totals.half,   cls: "text-amber-300",   bg: "bg-amber-500/10 border-amber-500/20" },
+                      { label: t.off,    value: role.monthData.totals.off,    cls: "text-sky-300",     bg: "bg-sky-500/10 border-sky-500/20" },
+                      { label: t.absent, value: role.monthData.totals.absent, cls: "text-rose-300",    bg: "bg-rose-500/10 border-rose-500/20" },
+                    ].map((s) => (
+                      <div key={s.label} className={`rounded-xl border p-3 text-center ${s.bg}`}>
+                        <div className={`text-2xl font-bold ${s.cls}`}>{s.value}</div>
+                        <div className="mt-1 text-[10px] font-medium text-white/40 leading-tight">{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: t.worked, value: monthData.totals.worked, cls: "text-emerald-300", bg: "bg-emerald-500/10 border-emerald-500/20" },
+                { label: t.half,   value: monthData.totals.half,   cls: "text-amber-300",   bg: "bg-amber-500/10 border-amber-500/20" },
+                { label: t.off,    value: monthData.totals.off,    cls: "text-sky-300",     bg: "bg-sky-500/10 border-sky-500/20" },
+                { label: t.absent, value: monthData.totals.absent, cls: "text-rose-300",    bg: "bg-rose-500/10 border-rose-500/20" },
+              ].map((s) => (
+                <div key={s.label} className={`rounded-xl border p-3 text-center ${s.bg}`}>
+                  <div className={`text-2xl font-bold ${s.cls}`}>{s.value}</div>
+                  <div className="mt-1 text-[10px] font-medium text-white/40 leading-tight">{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── Salary breakdown ── */}
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
+        <div className="rounded-2xl border border-white/[0.07] bg-white/2.5 p-5">
           <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/35">{t.breakdown}</div>
           <div className="space-y-2">
-            {[
-              { label: `${t.worked} (${monthData.totals.worked} × ₹${money(perDay)})`, value: salary.grossPayable - monthData.totals.half * (perDay / 2) - Math.min(monthData.totals.off, savedPaidOffAllowance) * perDay, show: monthData.totals.worked > 0 },
-              { label: `${t.half} (${monthData.totals.half} × ₹${money(perDay / 2)})`, value: monthData.totals.half * (perDay / 2), show: monthData.totals.half > 0 },
-              { label: `${t.off} (${Math.min(monthData.totals.off, savedPaidOffAllowance)} paid)`, value: Math.min(monthData.totals.off, savedPaidOffAllowance) * perDay, show: monthData.totals.off > 0 },
-            ].filter((r) => r.show).map((r) => (
-              <div key={r.label} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] px-4 py-2.5">
-                <span className="text-sm text-white/60">{r.label}</span>
-                <span className="text-sm font-semibold text-white">₹{money(r.value)}</span>
-              </div>
-            ))}
+            {/* Per-role gross rows */}
+            {isGrouped ? (
+              roles.map((role) => (
+                <div key={role.worker.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/3 px-4 py-2.5">
+                  <span className="text-sm text-white/60">{role.worker.name}</span>
+                  <span className="text-sm font-semibold text-white">₹{money(role.salary.grossPayable)}</span>
+                </div>
+              ))
+            ) : (
+              [
+                { label: `${t.worked} (${monthData.totals.worked} × ₹${money(perDay)})`, value: primaryRole.salary.workedAmt, show: monthData.totals.worked > 0 },
+                { label: `${t.half} (${monthData.totals.half} × ₹${money(perDay / 2)})`, value: primaryRole.salary.halfAmt, show: monthData.totals.half > 0 },
+                { label: `${t.off} (${primaryRole.salary.paidOffCount} paid)`, value: primaryRole.salary.offAmt, show: monthData.totals.off > 0 },
+              ].filter((r) => r.show).map((r) => (
+                <div key={r.label} className="flex items-center justify-between gap-3 rounded-xl bg-white/3 px-4 py-2.5">
+                  <span className="text-sm text-white/60">{r.label}</span>
+                  <span className="text-sm font-semibold text-white">₹{money(r.value)}</span>
+                </div>
+              ))
+            )}
 
             {/* Deductions */}
-            {deductions.length > 0 && (
+            {allGroupDeductions.length > 0 && (
               <>
-                <div className="my-1 h-px bg-white/[0.06]" />
-                {deductions.sort((a, b) => a.dateISO > b.dateISO ? -1 : 1).map((d) => (
-                  <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-rose-500/10 bg-rose-500/[0.05] px-4 py-2.5">
+                <div className="my-1 h-px bg-white/6" />
+                {allGroupDeductions.sort((a, b) => a.dateISO > b.dateISO ? -1 : 1).map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-rose-500/10 bg-rose-500/5 px-4 py-2.5">
                     <div className="min-w-0">
                       <span className="text-sm text-white/55">{d.note || t.deductions}</span>
                       <span className="ml-2 text-xs text-white/25">{fmtDate(d.dateISO, lang)}</span>
@@ -322,47 +394,58 @@ export default async function ShareWorkerPage({ params, searchParams }: PageProp
             )}
 
             {/* Net total */}
-            <div className="mt-1 flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] px-4 py-3">
+            <div className="mt-1 flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/7 px-4 py-3">
               <span className="text-sm font-semibold text-white">{t.net}</span>
-              <span className="text-xl font-bold text-emerald-300">₹{money(salary.netPayable)}</span>
+              <span className="text-xl font-bold text-emerald-300">₹{money(groupNetPayable)}</span>
             </div>
           </div>
         </div>
 
         {/* ── Date details ── */}
-        {(monthData.dates.half.length > 0 || monthData.dates.off.length > 0 || monthData.dates.absent.length > 0) && (
-          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
+        {roles.some((r) => r.monthData.dates.half.length > 0 || r.monthData.dates.off.length > 0 || r.monthData.dates.absent.length > 0) && (
+          <div className="rounded-2xl border border-white/7 bg-white/2.5 p-5">
             <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/35">{t.dates}</div>
-            <div className="space-y-3">
-              {[
-                { label: t.halfDates, dates: monthData.dates.half, chipCls: "bg-amber-500/15 text-amber-300 border-amber-500/20" },
-                { label: t.offDates,  dates: monthData.dates.off,  chipCls: "bg-sky-500/15 text-sky-300 border-sky-500/20" },
-                { label: t.absentDates, dates: monthData.dates.absent, chipCls: "bg-rose-500/15 text-rose-300 border-rose-500/20" },
-              ].filter((r) => r.dates.length > 0).map((r) => (
-                <div key={r.label}>
-                  <div className="mb-1.5 text-xs font-medium text-white/35">{r.label}</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {r.dates.map((d) => (
-                      <span key={d} className={`rounded-lg border px-2 py-1 text-xs font-medium ${r.chipCls}`}>
-                        {fmtDate(d, lang)}
-                      </span>
+            <div className="space-y-4">
+              {roles.map((role) => {
+                const rows = [
+                  { label: t.halfDates,   dates: role.monthData.dates.half,   chipCls: "bg-amber-500/15 text-amber-300 border-amber-500/20" },
+                  { label: t.offDates,    dates: role.monthData.dates.off,    chipCls: "bg-sky-500/15 text-sky-300 border-sky-500/20" },
+                  { label: t.absentDates, dates: role.monthData.dates.absent, chipCls: "bg-rose-500/15 text-rose-300 border-rose-500/20" },
+                ].filter((r) => r.dates.length > 0);
+                if (rows.length === 0) return null;
+                return (
+                  <div key={role.worker.id} className="space-y-3">
+                    {isGrouped && roles.length > 1 && (
+                      <div className="text-[11px] font-medium text-white/35">{role.worker.name}</div>
+                    )}
+                    {rows.map((r) => (
+                      <div key={r.label}>
+                        <div className="mb-1.5 text-xs font-medium text-white/35">{r.label}</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {r.dates.map((d) => (
+                            <span key={d} className={`rounded-lg border px-2 py-1 text-xs font-medium ${r.chipCls}`}>
+                              {fmtDate(d, lang)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
         {/* ── How calculated ── */}
-        <details className="group rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+        <details className="group rounded-2xl border border-white/6 bg-white/2">
           <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-sm font-medium text-white/45 hover:text-white/60 transition">
             <span>{t.howCalc}</span>
             <svg className="h-3.5 w-3.5 transition-transform group-open:rotate-180" viewBox="0 0 14 14" fill="none">
               <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </summary>
-          <div className="border-t border-white/[0.06] px-5 py-4 space-y-2">
+          <div className="border-t border-white/6 px-5 py-4 space-y-2">
             {[t.calc1, t.calc2, t.calc3, t.calc4].map((line) => (
               <div key={line} className="flex items-start gap-2.5 text-xs text-white/40">
                 <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400/50" />

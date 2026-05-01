@@ -7,6 +7,7 @@ export type Worker = {
   startDate?: string; // YYYY-MM-DD — the date this worker started
 
   archivedAt?: number;
+  personId?: string; // shared ID across multiple workers who are the same physical person
 
   createdAt: number;
   updatedAt: number;

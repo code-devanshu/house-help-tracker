@@ -60,12 +60,14 @@ export function calculateSalary(params: {
   const perDay = daysInMonth > 0 ? monthlySalary / daysInMonth : 0;
   const halfDay = perDay / 2;
 
-  const paidOffCount = Math.min(totals.off, paidOffAllowance);
-  const unpaidOffCount = Math.max(0, totals.off - paidOffAllowance);
+  const totalShortfall = totals.absent + totals.half * 0.5 + totals.off;
+  const coveredByAllowance = Math.min(totalShortfall, paidOffAllowance);
+  const paidOffCount = coveredByAllowance; // kept for backward compat on result type
+  const unpaidOffCount = Math.max(0, totals.off - Math.min(totals.off, paidOffAllowance));
 
   const workedAmt = totals.worked * perDay;
   const halfAmt = totals.half * halfDay;
-  const offAmt = paidOffCount * perDay;
+  const offAmt = coveredByAllowance * perDay;
 
   const grossPayable = workedAmt + halfAmt + offAmt;
 

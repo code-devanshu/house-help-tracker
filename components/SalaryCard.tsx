@@ -21,6 +21,7 @@ type Props = {
   deductions?: Deduction[];
   onAddDeduction?: (next: Omit<Deduction, "id" | "createdAt" | "updatedAt">) => void;
   onDeleteDeduction?: (id: string) => void;
+  isGrouped?: boolean;
 };
 
 const toNum = (v: string) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -43,11 +44,11 @@ export function SalaryCard({
   deductions,
   onAddDeduction,
   onDeleteDeduction,
+  isGrouped = false,
 }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deductAmount, setDeductAmount] = useState("");
   const [deductNote, setDeductNote] = useState("");
-  const [deductDate, setDeductDate] = useState(`${monthKey}-01`);
 
   const safeDeductions = useMemo(() => (Array.isArray(deductions) ? deductions : []), [deductions]);
 
@@ -55,9 +56,11 @@ export function SalaryCard({
   const paidOffAllowance = useMemo(() => clamp(toNum(paidOffDraft), 0, 366), [paidOffDraft]);
   const perDay = daysInMonth > 0 ? monthlySalary / daysInMonth : 0;
   const halfDay = perDay / 2;
-  const paidOffCount = Math.min(totals.off, paidOffAllowance);
-  const unpaidOffCount = Math.max(0, totals.off - paidOffAllowance);
-  const grossPayable = totals.worked * perDay + totals.half * halfDay + paidOffCount * perDay;
+  // Each absent = 1 day shortfall, each half = 0.5 day shortfall, each off = 1 day shortfall.
+  // The paid-off allowance absorbs however many day-equivalents it can, regardless of status type.
+  const totalShortfall = totals.absent + totals.half * 0.5 + totals.off;
+  const coveredByAllowance = Math.min(totalShortfall, paidOffAllowance);
+  const grossPayable = totals.worked * perDay + totals.half * halfDay + coveredByAllowance * perDay;
   const deductionsTotal = useMemo(() => safeDeductions.reduce((s, d) => { const a = Number(d.amount); return s + (Number.isFinite(a) && a > 0 ? a : 0); }, 0), [safeDeductions]);
   const netPayable = Math.max(0, grossPayable - deductionsTotal);
   const isDirty = monthlySalary !== (savedMonthlySalary ?? 0) || paidOffAllowance !== (savedPaidOffAllowance ?? 0);
@@ -66,7 +69,7 @@ export function SalaryCard({
 
   const handleAddDeduction = () => {
     if (disabled || !onAddDeduction || !canAddDeduction) return;
-    onAddDeduction({ workerId, monthKey, dateISO: deductDate || `${monthKey}-01`, amount: Math.round(Number(deductAmount)), note: deductNote.trim() || undefined });
+    onAddDeduction({ workerId, monthKey, dateISO: `${monthKey}-01`, amount: Math.round(Number(deductAmount)), note: deductNote.trim() || undefined });
     setDeductAmount(""); setDeductNote("");
   };
 
@@ -105,7 +108,7 @@ export function SalaryCard({
           { title: "Worked", sub: `${totals.worked} × ₹${money(perDay)}`, amt: totals.worked * perDay, color: "text-emerald-400", bar: "bg-emerald-400/60" },
           { title: "Half day", sub: `${totals.half} × ₹${money(halfDay)}`, amt: totals.half * halfDay, color: "text-amber-400", bar: "bg-amber-400/60" },
           { title: "Absent", sub: `${totals.absent} × ₹0`, amt: 0, color: "text-rose-400", bar: "bg-rose-400/60" },
-          { title: "Off", sub: `${paidOffCount} paid · ${unpaidOffCount} unpaid`, amt: paidOffCount * perDay, color: "text-slate-400", bar: "bg-slate-400/40" },
+          { title: "Allowance", sub: coveredByAllowance > 0 ? `${coveredByAllowance % 1 === 0 ? coveredByAllowance : coveredByAllowance.toFixed(1)}d of ${paidOffAllowance}d used` : `${paidOffAllowance}d available`, amt: coveredByAllowance * perDay, color: "text-slate-400", bar: "bg-slate-400/40" },
         ].map((t) => (
           <div key={t.title} className="relative overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-3.5 dark:border-white/6 dark:bg-white/2">
             <div className={`absolute left-0 top-0 h-full w-0.5 ${t.bar}`} />
@@ -187,72 +190,86 @@ export function SalaryCard({
 
       {/* ── Deductions ── */}
       <div className="px-5 py-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="text-sm font-medium text-slate-500 dark:text-white/60">Deductions</div>
-          {deductionsTotal > 0 && (
-            <span className="text-xs font-semibold text-rose-400">−₹{money(deductionsTotal)}</span>
-          )}
-        </div>
-
-        {/* Add row */}
-        {!disabled && onAddDeduction && (
-          <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_160px_auto]">
-            <input
-              value={deductNote}
-              onChange={(e) => setDeductNote(e.target.value)}
-              placeholder="Note (e.g. advance, festival)"
-              className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/4 dark:text-white dark:placeholder:text-white/25"
-            />
-            <input
-              type="number" min={0} step={1}
-              value={deductAmount}
-              onChange={(e) => setDeductAmount(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleAddDeduction(); }}
-              placeholder="Amount (₹)"
-              className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/4 dark:text-white dark:placeholder:text-white/25"
-            />
-            <button
-              type="button"
-              onClick={handleAddDeduction}
-              disabled={!canAddDeduction}
-              className={`h-9 rounded-xl px-4 text-sm font-semibold transition whitespace-nowrap ${
-                canAddDeduction ? "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/8 dark:text-white dark:hover:bg-white/12" : "bg-slate-50 text-slate-300 dark:bg-white/4 dark:text-white/25"
-              }`}
-            >
-              + Add
-            </button>
-          </div>
-        )}
-
-        {/* List */}
-        {safeDeductions.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 py-4 text-center text-xs text-slate-400 dark:border-white/8 dark:text-white/25">
-            No deductions for {monthKey}
+        {isGrouped ? (
+          <div className="flex items-center gap-3 rounded-xl border border-dashed border-indigo-200 bg-indigo-50/60 px-4 py-3 dark:border-indigo-500/20 dark:bg-indigo-500/5">
+            <svg className="h-4 w-4 shrink-0 text-indigo-400" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M8 7v4M8 5.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+            <span className="text-xs text-indigo-600 dark:text-indigo-400">
+              Deductions for linked workers are managed from the <strong>Dashboard</strong>.
+            </span>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {safeDeductions.map((d) => (
-              <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2.5 dark:border-white/6 dark:bg-white/2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className="text-sm font-semibold text-rose-500 dark:text-rose-300">−₹{money(d.amount)}</span>
-                    {d.note && <span className="text-xs text-slate-500 truncate dark:text-white/50">{d.note}</span>}
-                    <span className="text-[11px] text-slate-400 dark:text-white/25">{d.dateISO}</span>
-                  </div>
-                </div>
-                {!disabled && onDeleteDeduction && (
-                  <button
-                    type="button"
-                    onClick={() => onDeleteDeduction(d.id)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-rose-50 hover:text-rose-500 transition text-sm dark:text-white/25 dark:hover:bg-rose-500/15 dark:hover:text-rose-400"
-                    title="Remove deduction"
-                  >
-                    ×
-                  </button>
-                )}
+          <>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-medium text-slate-500 dark:text-white/60">Deductions</div>
+              {deductionsTotal > 0 && (
+                <span className="text-xs font-semibold text-rose-400">−₹{money(deductionsTotal)}</span>
+              )}
+            </div>
+
+            {/* Add row */}
+            {!disabled && onAddDeduction && (
+              <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_160px_auto]">
+                <input
+                  value={deductNote}
+                  onChange={(e) => setDeductNote(e.target.value)}
+                  placeholder="Note (e.g. advance, festival)"
+                  className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/4 dark:text-white dark:placeholder:text-white/25"
+                />
+                <input
+                  type="number" min={0} step={1}
+                  value={deductAmount}
+                  onChange={(e) => setDeductAmount(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddDeduction(); }}
+                  placeholder="Amount (₹)"
+                  className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/4 dark:text-white dark:placeholder:text-white/25"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddDeduction}
+                  disabled={!canAddDeduction}
+                  className={`h-9 rounded-xl px-4 text-sm font-semibold transition whitespace-nowrap ${
+                    canAddDeduction ? "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/8 dark:text-white dark:hover:bg-white/12" : "bg-slate-50 text-slate-300 dark:bg-white/4 dark:text-white/25"
+                  }`}
+                >
+                  + Add
+                </button>
               </div>
-            ))}
-          </div>
+            )}
+
+            {/* List */}
+            {safeDeductions.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 py-4 text-center text-xs text-slate-400 dark:border-white/8 dark:text-white/25">
+                No deductions for {monthKey}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {safeDeductions.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2.5 dark:border-white/6 dark:bg-white/2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="text-sm font-semibold text-rose-500 dark:text-rose-300">−₹{money(d.amount)}</span>
+                        {d.note && <span className="text-xs text-slate-500 truncate dark:text-white/50">{d.note}</span>}
+                        <span className="text-[11px] text-slate-400 dark:text-white/25">{d.dateISO}</span>
+                      </div>
+                    </div>
+                    {!disabled && onDeleteDeduction && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteDeduction(d.id)}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-rose-50 hover:text-rose-500 transition text-sm dark:text-white/25 dark:hover:bg-rose-500/15 dark:hover:text-rose-400"
+                        title="Remove deduction"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>

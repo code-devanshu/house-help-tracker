@@ -34,10 +34,33 @@ export default function WorkersPage() {
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean; workerId: string | null; workerName: string; typed: string;
   }>({ open: false, workerId: null, workerName: "", typed: "" });
+  const [linkModal, setLinkModal] = useState<{ open: boolean; workerId: string | null }>({ open: false, workerId: null });
 
   const activeWorkers = useMemo(() => workers.filter((w) => !w.archivedAt), [workers]);
   const archivedWorkers = useMemo(() => workers.filter((w) => !!w.archivedAt), [workers]);
   const canAdd = useMemo(() => draft.name.trim().length >= 2, [draft.name]);
+
+  // Group active workers by personId. Workers without personId are solo groups.
+  const workerGroups = useMemo(() => {
+    const seen = new Set<string>();
+    const groups: { personId: string | null; workers: Worker[] }[] = [];
+    for (const w of activeWorkers) {
+      if (!w.personId) { groups.push({ personId: null, workers: [w] }); continue; }
+      if (seen.has(w.personId)) continue;
+      seen.add(w.personId);
+      groups.push({ personId: w.personId, workers: activeWorkers.filter((a) => a.personId === w.personId) });
+    }
+    return groups;
+  }, [activeWorkers]);
+
+  // Workers that can be picked in the link modal (not in the same group)
+  const linkableWorkers = useMemo(() => {
+    if (!linkModal.workerId) return [];
+    const current = workers.find((w) => w.id === linkModal.workerId);
+    return activeWorkers.filter(
+      (w) => w.id !== linkModal.workerId && !(current?.personId && w.personId === current.personId),
+    );
+  }, [linkModal.workerId, activeWorkers, workers]);
 
   useEffect(() => {
     startTransition(async () => {
@@ -83,6 +106,22 @@ export default function WorkersPage() {
 
   const handleArchive = (w: Worker) => { persistAndSync(archiveWorker(w.id)); showToast(`${w.name} archived.`, "info"); };
   const handleRestore = (w: Worker) => { persistAndSync(restoreWorker(w.id)); showToast(`${w.name} restored.`, "success"); };
+
+  const handleLink = (workerAId: string, workerBId: string) => {
+    const a = workers.find((w) => w.id === workerAId)!;
+    const b = workers.find((w) => w.id === workerBId)!;
+    const personId = a.personId ?? b.personId ?? makeId("person");
+    const now = Date.now();
+    upsertWorker({ ...a, personId, updatedAt: now });
+    persistAndSync(upsertWorker({ ...b, personId, updatedAt: now }));
+    setLinkModal({ open: false, workerId: null });
+    showToast("Linked as same person.", "success");
+  };
+
+  const handleUnlink = (w: Worker) => {
+    persistAndSync(upsertWorker({ ...w, personId: undefined, updatedAt: Date.now() }));
+    showToast(`${w.name} unlinked.`, "info");
+  };
   const openDeleteModal = (worker: Worker) => setDeleteModal({ open: true, workerId: worker.id, workerName: worker.name, typed: "" });
   const closeDeleteModal = () => setDeleteModal({ open: false, workerId: null, workerName: "", typed: "" });
   const confirmDeleteModal = () => {
@@ -157,13 +196,37 @@ export default function WorkersPage() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-white/6">
-            {activeWorkers.map((worker) => (
-              <WorkerRow
-                key={worker.id}
-                worker={worker}
-                onArchive={() => handleArchive(worker)}
-              />
-            ))}
+            {workerGroups.map((group) =>
+              group.workers.length === 1 ? (
+                <WorkerRow
+                  key={group.workers[0].id}
+                  worker={group.workers[0]}
+                  onArchive={() => handleArchive(group.workers[0])}
+                  onLink={activeWorkers.length >= 2 ? () => setLinkModal({ open: true, workerId: group.workers[0].id }) : undefined}
+                />
+              ) : (
+                <div key={group.personId} className="border-l-2 border-indigo-300 dark:border-indigo-500/40">
+                  <div className="flex items-center gap-1.5 border-b border-slate-100 bg-indigo-50/60 px-4 py-2 dark:border-white/5 dark:bg-indigo-500/5">
+                    <svg className="h-3 w-3 text-indigo-400" viewBox="0 0 12 12" fill="none">
+                      <circle cx="6" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                      <circle cx="2.5" cy="9.5" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                      <circle cx="9.5" cy="9.5" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                      <path d="M6 5.5v2M6 7.5l-2 1.5M6 7.5l2 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+                    </svg>
+                    <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">Same person</span>
+                    <span className="text-[11px] text-slate-400 dark:text-white/30">· {group.workers.length} roles</span>
+                  </div>
+                  {group.workers.map((w) => (
+                    <WorkerRow
+                      key={w.id}
+                      worker={w}
+                      onArchive={() => handleArchive(w)}
+                      onUnlink={() => handleUnlink(w)}
+                    />
+                  ))}
+                </div>
+              )
+            )}
           </div>
         )}
       </div>
@@ -244,6 +307,46 @@ export default function WorkersPage() {
         </div>
       )}
 
+      {/* ── Link Modal ── */}
+      {linkModal.open && linkModal.workerId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setLinkModal({ open: false, workerId: null }); }}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm dark:bg-black/70" />
+          <div className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-[0_24px_64px_rgba(0,0,0,0.12)] dark:border-white/10 dark:bg-[#0D1117] dark:shadow-[0_24px_64px_rgba(0,0,0,0.7)]">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-white/7">
+              <div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">Link as same person</div>
+                <div className="mt-0.5 text-xs text-slate-500 dark:text-white/40">Pick the other role of the same person.</div>
+              </div>
+              <button onClick={() => setLinkModal({ open: false, workerId: null })} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition text-lg leading-none dark:text-white/40 dark:hover:bg-white/6 dark:hover:text-white/70">×</button>
+            </div>
+            <div className="max-h-72 overflow-y-auto p-2">
+              {linkableWorkers.length === 0 ? (
+                <div className="py-8 text-center text-sm text-slate-400 dark:text-white/30">No other workers to link with.</div>
+              ) : (
+                linkableWorkers.map((w) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => handleLink(linkModal.workerId!, w.id)}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-white/5"
+                  >
+                    <WorkerAvatar name={w.name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{w.name}</div>
+                      {w.defaultShiftLabel && <div className="text-xs text-slate-400 dark:text-white/35">{w.defaultShiftLabel}</div>}
+                      {w.personId && <div className="text-[11px] text-indigo-500 dark:text-indigo-400">Already in a group — will merge</div>}
+                    </div>
+                    <svg className="h-4 w-4 shrink-0 text-slate-300 dark:text-white/20" viewBox="0 0 14 14" fill="none">
+                      <path d="M5 7h4M7 5l2 2-2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Delete Modal ── */}
       {deleteModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onMouseDown={(e) => { if (e.target === e.currentTarget) closeDeleteModal(); }}>
@@ -291,7 +394,17 @@ function WorkerAvatar({ name, muted = false }: { name: string; muted?: boolean }
   );
 }
 
-function WorkerRow({ worker, onArchive }: { worker: Worker; onArchive: () => void }) {
+function WorkerRow({
+  worker,
+  onArchive,
+  onLink,
+  onUnlink,
+}: {
+  worker: Worker;
+  onArchive: () => void;
+  onLink?: () => void;
+  onUnlink?: () => void;
+}) {
   return (
     <div className="group relative flex items-center gap-3 px-4 py-4 transition hover:bg-slate-50 sm:px-5 dark:hover:bg-white/2.5">
       <Link href={`/workers/${worker.id}`} className="absolute inset-0 z-0" aria-label={`Open ${worker.name}`} />
@@ -310,6 +423,7 @@ function WorkerRow({ worker, onArchive }: { worker: Worker; onArchive: () => voi
       </div>
 
       <div className="relative z-10 flex shrink-0 items-center gap-2">
+        {/* Mobile archive */}
         <button
           onClick={(e) => { e.stopPropagation(); onArchive(); }}
           className="flex h-8 items-center rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-500 transition hover:border-amber-400/50 hover:bg-amber-50 hover:text-amber-600 sm:hidden dark:border-white/10 dark:text-white/40 dark:hover:border-amber-500/30 dark:hover:bg-amber-500/10 dark:hover:text-amber-300"
@@ -318,6 +432,35 @@ function WorkerRow({ worker, onArchive }: { worker: Worker; onArchive: () => voi
         </button>
 
         <div className="hidden sm:flex items-center gap-2">
+          {/* Unlink button — only for workers in a group */}
+          {onUnlink && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onUnlink(); }}
+              title="Unlink from same person"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-rose-400/50 hover:bg-rose-50 hover:text-rose-500 transition dark:border-white/10 dark:text-white/35 dark:hover:border-rose-500/30 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 14 14" fill="none">
+                <path d="M9 5a2.5 2.5 0 0 1 0 3.5l-1 1A2.5 2.5 0 0 1 4.5 6l.5-.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <path d="M5 9a2.5 2.5 0 0 1 0-3.5l1-1A2.5 2.5 0 0 1 9.5 8l-.5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <path d="M4 4l6 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
+
+          {/* Link button — only for solo workers */}
+          {onLink && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onLink(); }}
+              title="Link with another worker (same person)"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-indigo-400/50 hover:bg-indigo-50 hover:text-indigo-500 transition dark:border-white/10 dark:text-white/35 dark:hover:border-indigo-500/30 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 14 14" fill="none">
+                <path d="M8.5 5.5a2.5 2.5 0 0 1 0 3.5l-1 1A2.5 2.5 0 0 1 4 6.5l.5-.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <path d="M5.5 8.5a2.5 2.5 0 0 1 0-3.5l1-1A2.5 2.5 0 0 1 10 7.5l-.5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
+
           <button
             onClick={(e) => { e.stopPropagation(); onArchive(); }}
             title="Archive"

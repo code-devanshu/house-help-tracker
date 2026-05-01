@@ -15,9 +15,10 @@ import {
 import { MonthPicker } from "@/components/MonthPicker";
 import { showToast } from "@/components/Toast";
 import { useTheme } from "@/components/ThemeProvider";
-import { loadAppData, saveAppData } from "@/lib/storage/localStore";
+import { loadAppData, saveAppData, upsertDeduction } from "@/lib/storage/localStore";
 import type { AppData } from "@/lib/storage/schema";
 import { addMonths, daysInMonth, monthLabel } from "@/lib/utils/date";
+import { makeId } from "@/lib/utils/id";
 import { getAppData, syncAppData } from "../workers/action";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,9 +61,10 @@ function computeWorkerPay(workerId: string, monthKey: string, appData: AppData) 
   }
   if (!cfg) return { ...totals, net: 0, gross: 0, deductionsTotal: 0, hasSalary: false };
   const perDay = days > 0 ? cfg.monthlySalary / days : 0;
-  const paidOff = Math.min(totals.off, cfg.paidOffAllowance);
+  const totalShortfall = totals.absent + totals.half * 0.5 + totals.off;
+  const coveredByAllowance = Math.min(totalShortfall, cfg.paidOffAllowance);
   const gross =
-    totals.worked * perDay + totals.half * (perDay / 2) + paidOff * perDay;
+    totals.worked * perDay + totals.half * (perDay / 2) + coveredByAllowance * perDay;
   const deductionsTotal = appData.deductions
     .filter((d) => d.workerId === workerId && d.monthKey === monthKey)
     .reduce(
@@ -76,6 +78,30 @@ function computeWorkerPay(workerId: string, monthKey: string, appData: AppData) 
     deductionsTotal,
     hasSalary: true,
   };
+}
+
+function computeGroupedTotalNet(
+  workers: { id: string; personId?: string; startDate?: string; archivedAt?: number }[],
+  monthKey: string,
+  appData: AppData,
+): number {
+  const perPerson = new Map<string, { gross: number; deductions: number }>();
+  for (const w of workers) {
+    if (!workerActiveInMonth(w, monthKey)) continue;
+    const pay = computeWorkerPay(w.id, monthKey, appData);
+    if (!pay.hasSalary) continue;
+    const key = w.personId ?? w.id;
+    const existing = perPerson.get(key) ?? { gross: 0, deductions: 0 };
+    perPerson.set(key, {
+      gross: existing.gross + pay.gross,
+      deductions: existing.deductions + pay.deductionsTotal,
+    });
+  }
+  let total = 0;
+  for (const { gross, deductions } of perPerson.values()) {
+    total += Math.max(0, gross - deductions);
+  }
+  return total;
 }
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -180,9 +206,72 @@ export default function DashboardPage() {
     [allWorkers, monthKey, appData],
   );
 
-  const totalNet = workerBreakdown.reduce((s, r) => s + r.net, 0);
-  const avgNet = workerBreakdown.length > 0 ? totalNet / workerBreakdown.length : 0;
   const maxNet = workerBreakdown[0]?.net ?? 1;
+
+  // Group linked workers together in the breakdown
+  const breakdownGroups = useMemo(() => {
+    const seen = new Set<string>();
+    const groups: {
+      personId: string | null;
+      rows: typeof workerBreakdown;
+      groupGross: number;
+      groupDeductions: number;
+      groupNet: number;
+    }[] = [];
+    for (const row of workerBreakdown) {
+      if (!row.worker.personId) {
+        groups.push({ personId: null, rows: [row], groupGross: row.gross, groupDeductions: row.deductionsTotal, groupNet: row.net });
+        continue;
+      }
+      if (seen.has(row.worker.personId)) continue;
+      seen.add(row.worker.personId);
+      const groupRows = workerBreakdown.filter((r) => r.worker.personId === row.worker.personId);
+      const groupGross = groupRows.reduce((s, r) => s + r.gross, 0);
+      const groupDeductions = groupRows.reduce((s, r) => s + r.deductionsTotal, 0);
+      groups.push({
+        personId: row.worker.personId,
+        rows: groupRows,
+        groupGross,
+        groupDeductions,
+        groupNet: Math.max(0, groupGross - groupDeductions),
+      });
+    }
+    return groups;
+  }, [workerBreakdown]);
+
+  // Total across all persons (groups), using pooled gross−deductions per person so overflow is not lost
+  const totalNet = breakdownGroups.reduce((s, g) => s + g.groupNet, 0);
+  const avgNet = breakdownGroups.length > 0 ? totalNet / breakdownGroups.length : 0;
+
+  // Quick-add deduction for a grouped person (stored against the first worker in the group)
+  const [quickDeduct, setQuickDeduct] = useState<{ personId: string; amount: string; note: string } | null>(null);
+
+  const handleAddGroupDeduction = () => {
+    if (!quickDeduct) return;
+    const amount = Math.round(Number(quickDeduct.amount));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const group = breakdownGroups.find((g) => g.personId === quickDeduct.personId);
+    const primaryWorkerId = group?.rows[0]?.worker.id;
+    if (!primaryWorkerId) return;
+    const now = Date.now();
+    const updated = upsertDeduction({
+      id: makeId("deduct"),
+      workerId: primaryWorkerId,
+      monthKey,
+      dateISO: `${monthKey}-01`,
+      amount,
+      note: quickDeduct.note.trim() || undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+    saveAppData(updated);
+    setAppData(updated);
+    setQuickDeduct(null);
+    startTransition(async () => {
+      const result = await syncAppData(updated);
+      if (!result.ok) showToast("Sync failed. Deduction saved locally.", "error");
+    });
+  };
 
   // Last 6 months bar chart data (all workers)
   const trendData = useMemo(() => {
@@ -190,9 +279,7 @@ export default function DashboardPage() {
     for (let i = 5; i >= 0; i--) months.push(addMonths(currentMonthStart, -i));
     return months.map((d) => {
       const mk = mkKey(d);
-      const total = allWorkers
-        .filter((w) => workerActiveInMonth(w, mk))
-        .reduce((sum, w) => sum + computeWorkerPay(w.id, mk, appData).net, 0);
+      const total = computeGroupedTotalNet(allWorkers, mk, appData);
       return { label: shortMonth(mk), monthKey: mk, total };
     });
   }, [allWorkers, currentMonthStart, appData]);
@@ -354,55 +441,78 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-white/5">
-            {workerBreakdown.map(({ worker, net, gross, deductionsTotal, hasSalary, worked, half, absent }) => (
-              <Link
-                key={worker.id}
-                href={`/workers/${worker.id}`}
-                className="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50 dark:hover:bg-white/2.5"
-              >
-                <WorkerAvatar name={worker.name} />
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`truncate text-sm font-semibold ${worker.archivedAt ? "text-slate-400 dark:text-white/45" : "text-slate-800 dark:text-white/85"}`}>{worker.name}</span>
-                    {worker.archivedAt && (
-                      <span className="shrink-0 rounded-full border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-400 dark:border-white/10 dark:text-white/30">archived</span>
-                    )}
-                  </div>
-                  {hasSalary ? (
-                    <div className="mt-0.5 flex items-center gap-2">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/8">
-                        <div
-                          className="h-full rounded-full bg-linear-to-r from-indigo-500 to-violet-500 transition-all duration-500"
-                          style={{ width: maxNet > 0 ? `${(net / maxNet) * 100}%` : "0%" }}
-                        />
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-slate-400 dark:text-white/30">
-                        {worked > 0 && <span className="text-emerald-600 dark:text-emerald-400/70">{worked}W</span>}
-                        {half > 0 && <span className="text-amber-600 dark:text-amber-400/70">{half}H</span>}
-                        {absent > 0 && <span className="text-rose-500 dark:text-rose-400/60">{absent}A</span>}
+            {breakdownGroups.map((group) =>
+              group.rows.length === 1 ? (
+                // ── Solo worker row ──
+                <BreakdownRow key={group.rows[0].worker.id} row={group.rows[0]} maxNet={maxNet} monthKey={monthKey} />
+              ) : (
+                // ── Linked-worker group ──
+                <div key={group.personId} className="border-l-2 border-indigo-300 dark:border-indigo-500/40">
+                  {/* Group header */}
+                  <div className="flex items-center justify-between border-b border-slate-100 bg-indigo-50/60 px-5 py-3 dark:border-white/5 dark:bg-indigo-500/5">
+                    <div className="flex items-center gap-1.5">
+                      <svg className="h-3 w-3 text-indigo-400" viewBox="0 0 12 12" fill="none">
+                        <circle cx="6" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                        <circle cx="2.5" cy="9.5" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                        <circle cx="9.5" cy="9.5" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                        <path d="M6 5.5v2M6 7.5l-2 1.5M6 7.5l2 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+                      </svg>
+                      <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">Same person</span>
+                      <span className="text-[11px] text-slate-400 dark:text-white/30">· {group.rows.length} roles</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-emerald-600 dark:text-emerald-300">₹{money(group.groupNet)}</div>
+                      <div className="text-[11px] text-slate-400 dark:text-white/35">
+                        Gross ₹{money(group.groupGross)}
+                        {group.groupDeductions > 0 && <span className="text-rose-500 dark:text-rose-400/70"> − ₹{money(group.groupDeductions)}</span>}
                       </div>
                     </div>
+                  </div>
+                  {/* Individual rows */}
+                  {group.rows.map((row) => (
+                    <BreakdownRow key={row.worker.id} row={row} maxNet={maxNet} compact monthKey={monthKey} />
+                  ))}
+                  {/* Quick-add deduction */}
+                  {quickDeduct?.personId === group.personId ? (
+                    <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50 px-5 py-2.5 dark:border-white/5 dark:bg-white/2">
+                      <input
+                        autoFocus
+                        value={quickDeduct.note}
+                        onChange={(e) => setQuickDeduct((q) => q && ({ ...q, note: e.target.value }))}
+                        placeholder="Note (e.g. advance)"
+                        className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/4 dark:text-white"
+                      />
+                      <input
+                        type="number" min={0} step={1}
+                        value={quickDeduct.amount}
+                        onChange={(e) => setQuickDeduct((q) => q && ({ ...q, amount: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleAddGroupDeduction(); if (e.key === "Escape") setQuickDeduct(null); }}
+                        placeholder="₹ Amount"
+                        className="h-8 w-28 shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/4 dark:text-white"
+                      />
+                      <button
+                        onClick={handleAddGroupDeduction}
+                        disabled={!quickDeduct.amount || Number(quickDeduct.amount) <= 0}
+                        className="h-8 shrink-0 rounded-lg bg-rose-500 px-3 text-xs font-semibold text-white transition hover:bg-rose-400 disabled:opacity-40"
+                      >
+                        Deduct
+                      </button>
+                      <button onClick={() => setQuickDeduct(null)} className="text-slate-400 transition hover:text-slate-600 dark:text-white/30 dark:hover:text-white/60">
+                        <svg className="h-4 w-4" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                      </button>
+                    </div>
                   ) : (
-                    <div className="mt-0.5 text-xs text-slate-300 dark:text-white/25">No salary configured</div>
+                    <button
+                      onClick={() => setQuickDeduct({ personId: group.personId!, amount: "", note: "" })}
+                      className="flex w-full items-center gap-1.5 border-t border-slate-100 px-5 py-2 text-[11px] text-slate-400 transition hover:bg-slate-50 hover:text-rose-500 dark:border-white/5 dark:text-white/25 dark:hover:bg-white/2 dark:hover:text-rose-400"
+                    >
+                      <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                      Add deduction for this person
+                    </button>
                   )}
                 </div>
-
-                <div className="shrink-0 text-right">
-                  {hasSalary ? (
-                    <>
-                      <div className="text-sm font-bold text-emerald-600 dark:text-emerald-300">₹{money(net)}</div>
-                      {gross !== net && deductionsTotal > 0 && (
-                        <div className="text-[11px] text-slate-300 dark:text-white/25">−₹{money(deductionsTotal)}</div>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-sm text-slate-300 dark:text-white/25">—</span>
-                  )}
-                  <div className="mt-0.5 hidden text-[10px] text-indigo-500/70 group-hover:block dark:text-indigo-400/60">Open →</div>
-                </div>
-              </Link>
-            ))}
+              )
+            )}
           </div>
         )}
       </section>
@@ -411,6 +521,55 @@ export default function DashboardPage() {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
+
+type BreakdownRowData = {
+  worker: { id: string; name: string; archivedAt?: number; personId?: string };
+  net: number; gross: number; deductionsTotal: number; hasSalary: boolean;
+  worked: number; half: number; absent: number;
+};
+
+function BreakdownRow({ row, maxNet, compact = false, monthKey }: { row: BreakdownRowData; maxNet: number; compact?: boolean; monthKey: string }) {
+  const { worker, net, gross, deductionsTotal, hasSalary, worked, half, absent } = row;
+  return (
+    <Link
+      href={`/workers/${worker.id}?month=${monthKey}`}
+      className={`group flex items-center gap-3 transition hover:bg-slate-50 dark:hover:bg-white/2.5 ${compact ? "px-5 py-2.5" : "px-5 py-3.5"}`}
+    >
+      <WorkerAvatar name={worker.name} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={`truncate text-sm font-semibold ${worker.archivedAt ? "text-slate-400 dark:text-white/45" : "text-slate-800 dark:text-white/85"}`}>{worker.name}</span>
+          {worker.archivedAt && <span className="shrink-0 rounded-full border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-400 dark:border-white/10 dark:text-white/30">archived</span>}
+        </div>
+        {hasSalary ? (
+          <div className="mt-0.5 flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/8">
+              <div className="h-full rounded-full bg-linear-to-r from-indigo-500 to-violet-500 transition-all duration-500" style={{ width: maxNet > 0 ? `${(net / maxNet) * 100}%` : "0%" }} />
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-slate-400 dark:text-white/30">
+              {worked > 0 && <span className="text-emerald-600 dark:text-emerald-400/70">{worked}W</span>}
+              {half > 0 && <span className="text-amber-600 dark:text-amber-400/70">{half}H</span>}
+              {absent > 0 && <span className="text-rose-500 dark:text-rose-400/60">{absent}A</span>}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-0.5 text-xs text-slate-300 dark:text-white/25">No salary configured</div>
+        )}
+      </div>
+      <div className="shrink-0 text-right">
+        {hasSalary ? (
+          <>
+            <div className="text-sm font-bold text-emerald-600 dark:text-emerald-300">₹{money(net)}</div>
+            {gross !== net && deductionsTotal > 0 && <div className="text-[11px] text-slate-300 dark:text-white/25">−₹{money(deductionsTotal)}</div>}
+          </>
+        ) : (
+          <span className="text-sm text-slate-300 dark:text-white/25">—</span>
+        )}
+        <div className="mt-0.5 hidden text-[10px] text-indigo-500/70 group-hover:block dark:text-indigo-400/60">Open →</div>
+      </div>
+    </Link>
+  );
+}
 
 function StatCard({
   label,

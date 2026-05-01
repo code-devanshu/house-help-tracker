@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import type {
@@ -57,6 +57,7 @@ type PickerState = { open: boolean; iso: string | null; x: number; y: number };
 export default function WorkerTrackerPage() {
   const params = useParams<{ workerId?: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const workerId = typeof params.workerId === "string" ? params.workerId : "";
 
   const [isSyncing, startTransition] = useTransition();
@@ -76,6 +77,11 @@ export default function WorkerTrackerPage() {
 
   const [worker, setWorker] = useState<Worker | null>(null);
   const [month, setMonth] = useState<Date>(() => {
+    const monthParam = searchParams.get("month");
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      const [y, m] = monthParam.split("-").map(Number) as [number, number];
+      return new Date(y, m - 1, 1);
+    }
     const t = new Date();
     return new Date(t.getFullYear(), t.getMonth(), 1);
   });
@@ -356,7 +362,7 @@ export default function WorkerTrackerPage() {
               onShare={async () => {
                 const res = await createWorkerShareLink(worker.id, 30);
                 if (!res.ok) throw new Error(res.error);
-                await navigator.clipboard.writeText(res.data.url);
+                await navigator.clipboard.writeText(`${res.data.url}?month=${monthKey}`);
               }}
             />
 
@@ -435,6 +441,7 @@ export default function WorkerTrackerPage() {
           onSalaryDraftChange={setSalaryDraft}
           onPaidOffDraftChange={setPaidOffDraft}
           onSave={saveSalaryConfig}
+          isGrouped={!!worker.personId}
           deductions={deductions}
           onAddDeduction={(p) => addDeduction(p)}
           onDeleteDeduction={(id) => removeDeduction(id)}
