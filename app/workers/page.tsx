@@ -26,7 +26,7 @@ export default function WorkersPage() {
 
   const [appData, setAppData] = useState<AppData>(() => {
     if (typeof window !== "undefined") return loadAppData();
-    return { version: 3, workers: [], entries: [], monthLocks: [], salaryConfigs: [], deductions: [] };
+    return { version: 4, workers: [], entries: [], monthLocks: [], salaryConfigs: [], deductions: [], personCountLog: [] };
   });
 
   const workers = appData.workers;

@@ -12,6 +12,7 @@ export function AppNav() {
       <nav className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-white/8 dark:bg-white/3">
         <NavItem href="/dashboard" label="Dashboard" active={pathname === "/dashboard"} />
         <NavItem href="/workers" label="Workers" active={pathname.startsWith("/workers")} />
+        <NavItem href="/household" label="Household" active={pathname.startsWith("/household")} />
       </nav>
       <ThemeToggle />
     </div>

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type {
   Deduction,
   MonthLock,
+  PersonCountEntry,
   SalaryConfig,
   ShiftEntry,
   ShiftStatus,
@@ -22,6 +23,8 @@ import {
   upsertSalaryConfig,
   upsertWorker,
 } from "@/lib/storage/localStore";
+
+import { buildPersonSegments, type PersonSegment } from "@/lib/salary/calcSalary";
 
 import { MonthPicker } from "@/components/MonthPicker";
 import { SalaryCard } from "@/components/SalaryCard";
@@ -97,6 +100,10 @@ export default function WorkerTrackerPage() {
 
   const [salaryDraft, setSalaryDraft] = useState("");
   const [paidOffDraft, setPaidOffDraft] = useState("0");
+  const [perPersonRateDraft, setPerPersonRateDraft] = useState("0");
+  const [salaryModeDraft, setSalaryModeDraft] = useState<"fixed" | "per-person">("fixed");
+  const [personCountLog, setPersonCountLog] = useState<PersonCountEntry[]>([]);
+  const [personSegments, setPersonSegments] = useState<PersonSegment[]>([]);
 
   const [picker, setPicker] = useState<PickerState>({ open: false, iso: null, x: 0, y: 0 });
 
@@ -150,10 +157,16 @@ export default function WorkerTrackerPage() {
     const w = data.workers.find((x) => x.id === workerId) ?? null;
     if (!w) { router.replace("/workers"); return; }
     setWorker(w);
-    setEntries(data.entries.filter((e) => e.workerId === workerId));
+    const workerEntries = data.entries.filter((e) => e.workerId === workerId);
+    setEntries(workerEntries);
     setMonthLocks(data.monthLocks.filter((m) => m.workerId === workerId));
     setSalaryConfigs(data.salaryConfigs.filter((s) => s.workerId === workerId));
     setDeductions(data.deductions.filter((d) => d.workerId === workerId && d.monthKey === monthKey));
+    const monthCounts = (data.personCountLog ?? [])
+      .filter((p) => p.monthKey === monthKey)
+      .sort((a, b) => a.fromDateISO.localeCompare(b.fromDateISO));
+    setPersonCountLog(monthCounts);
+    setPersonSegments(buildPersonSegments(monthKey, monthCounts, workerEntries.filter((e) => e.dateISO.startsWith(monthKey))));
   }, [workerId, router, monthKey]);
 
   useEffect(() => {
@@ -171,13 +184,42 @@ export default function WorkerTrackerPage() {
   useEffect(() => {
     if (!currentSalaryConfig) {
       const prev = [...salaryConfigs].filter((c) => c.monthKey < monthKey).sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0];
-      if (prev) { setSalaryDraft(String(prev.monthlySalary ?? 0)); setPaidOffDraft(String(prev.paidOffAllowance ?? 0)); }
-      else { setSalaryDraft(""); setPaidOffDraft("0"); }
+      if (prev) {
+        if (prev.perPersonRate && prev.perPersonRate > 0) {
+          setSalaryModeDraft("per-person");
+          setPerPersonRateDraft(String(prev.perPersonRate));
+          setSalaryDraft("0");
+        } else {
+          setSalaryModeDraft("fixed");
+          setSalaryDraft(String(prev.monthlySalary ?? 0));
+          setPerPersonRateDraft("0");
+        }
+        setPaidOffDraft(String(prev.paidOffAllowance ?? 0));
+      } else {
+        setSalaryModeDraft("fixed");
+        setSalaryDraft("");
+        setPerPersonRateDraft("0");
+        setPaidOffDraft("0");
+      }
       return;
     }
-    setSalaryDraft(String(currentSalaryConfig.monthlySalary ?? 0));
+    if (currentSalaryConfig.perPersonRate && currentSalaryConfig.perPersonRate > 0) {
+      setSalaryModeDraft("per-person");
+      setPerPersonRateDraft(String(currentSalaryConfig.perPersonRate));
+      setSalaryDraft("0");
+    } else {
+      setSalaryModeDraft("fixed");
+      setSalaryDraft(String(currentSalaryConfig.monthlySalary ?? 0));
+      setPerPersonRateDraft("0");
+    }
     setPaidOffDraft(String(currentSalaryConfig.paidOffAllowance ?? 0));
   }, [currentSalaryConfig, monthKey, salaryConfigs]);
+
+  // Recompute person segments whenever entries or person count log changes
+  useEffect(() => {
+    const monthEntries = entries.filter((e) => e.dateISO.startsWith(monthKey));
+    setPersonSegments(buildPersonSegments(monthKey, personCountLog, monthEntries));
+  }, [monthKey, personCountLog, entries]);
 
   useEffect(() => {
     if (!workerId || !worker || monthKey !== currentMonthKey || isMonthLocked) return;
@@ -226,11 +268,19 @@ export default function WorkerTrackerPage() {
   const saveSalaryConfig = () => {
     if (!workerId || isMonthLocked) return;
     const now = Date.now();
-    const monthlySalary = Math.max(0, Math.round(Number(salaryDraft || 0)));
     const paidOffAllowance = Math.max(0, Math.round(Number(paidOffDraft || 0)));
+    let monthlySalary: number;
+    let perPersonRate: number | undefined;
+    if (salaryModeDraft === "per-person") {
+      monthlySalary = 0;
+      perPersonRate = Math.max(0, Math.round(Number(perPersonRateDraft || 0)));
+    } else {
+      monthlySalary = Math.max(0, Math.round(Number(salaryDraft || 0)));
+      perPersonRate = undefined;
+    }
     const next: SalaryConfig = currentSalaryConfig
-      ? { ...currentSalaryConfig, monthlySalary, paidOffAllowance, updatedAt: now }
-      : { id: makeId("salary"), workerId, monthKey, monthlySalary, paidOffAllowance, updatedAt: now };
+      ? { ...currentSalaryConfig, monthlySalary, paidOffAllowance, perPersonRate, updatedAt: now }
+      : { id: makeId("salary"), workerId, monthKey, monthlySalary, paidOffAllowance, perPersonRate, updatedAt: now };
     const updated = upsertSalaryConfig(next);
     setSalaryConfigs(updated.salaryConfigs.filter((s) => s.workerId === workerId));
     sync();
@@ -435,11 +485,17 @@ export default function WorkerTrackerPage() {
           totals={totals}
           savedMonthlySalary={currentSalaryConfig?.monthlySalary ?? 0}
           savedPaidOffAllowance={currentSalaryConfig?.paidOffAllowance ?? 0}
+          savedPerPersonRate={currentSalaryConfig?.perPersonRate ?? 0}
           salaryDraft={salaryDraft}
           paidOffDraft={paidOffDraft}
+          perPersonRateDraft={perPersonRateDraft}
+          salaryModeDraft={salaryModeDraft}
+          personSegments={personSegments}
           disabled={isMonthLocked}
           onSalaryDraftChange={setSalaryDraft}
           onPaidOffDraftChange={setPaidOffDraft}
+          onPerPersonRateDraftChange={setPerPersonRateDraft}
+          onSalaryModeDraftChange={setSalaryModeDraft}
           onSave={saveSalaryConfig}
           isGrouped={!!worker.personId}
           deductions={deductions}

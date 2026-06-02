@@ -49,6 +49,23 @@ export type SalaryConfig = {
   monthlySalary: number; // e.g. 12000
   paidOffAllowance: number; // e.g. 4 (paid OFF days allowed in this month)
 
+  // Optional per-person rate mode: effective salary = perPersonRate × household person count
+  perPersonRate?: number; // e.g. 2000 (₹ per person per month)
+
+  updatedAt: number;
+};
+
+/**
+ * ✅ Household person count change log
+ * Tracks when the number of persons in the house changes, per month.
+ * Used to calculate per-person salary for workers whose pay depends on household size.
+ */
+export type PersonCountEntry = {
+  id: string;
+  monthKey: string; // YYYY-MM
+  fromDateISO: string; // YYYY-MM-DD — this count applies from this date onwards
+  count: number; // number of persons from this date until next entry or end of month
+  createdAt: number;
   updatedAt: number;
 };
 
@@ -77,6 +94,7 @@ export type AppData = {
   salaryConfigs: SalaryConfig[];
 
   deductions: Deduction[];
+  personCountLog: PersonCountEntry[];
 };
 
 export type Draft = {

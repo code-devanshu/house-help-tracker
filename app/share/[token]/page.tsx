@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import type { AppData, Deduction, SalaryConfig, ShiftEntry } from "@/lib/storage/schema";
-import { calculateSalary, daysInMonthFromKey, type SalaryBreakdown } from "@/lib/salary/calcSalary";
+import type { AppData, Deduction, PersonCountEntry, SalaryConfig, ShiftEntry } from "@/lib/storage/schema";
+import { buildPersonSegments, calculateSalary, daysInMonthFromKey, type SalaryBreakdown } from "@/lib/salary/calcSalary";
 import { LangToggle } from "./LangToggle";
 
 type PageProps = {
@@ -208,20 +208,30 @@ export default async function ShareWorkerPage({ params, searchParams }: PageProp
   // Per-role data (deductions excluded here — pooled at group level below)
   const roles = groupMembers.map((member) => {
     const memberEntries = app.entries.filter((e) => e.workerId === member.id);
-    const memberCfg = app.salaryConfigs.find(
-      (s) => s.workerId === member.id && s.monthKey === monthKey,
+    const memberCfg = (
+      app.salaryConfigs.find((s) => s.workerId === member.id && s.monthKey === monthKey) ??
+      [...app.salaryConfigs]
+        .filter((s) => s.workerId === member.id && s.monthKey < monthKey)
+        .sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
     ) as SalaryConfig | undefined;
     const memberSavedSalary = pickNum(memberCfg, ["monthlySalary", "salary"], 0);
     const memberSavedOff = pickNum(memberCfg, ["paidOffAllowance", "paidOff", "offAllowance", "paidOffDays"], 0);
+    const memberPerPersonRate = pickNum(memberCfg, ["perPersonRate"], 0);
     const memberMonthData = buildMonthData(memberEntries, monthKey);
-    const memberPerDay = daysInMonth > 0 ? memberSavedSalary / daysInMonth : 0;
+    const personCountEntries = (app.personCountLog ?? []).filter((p) => p.monthKey === monthKey);
+    const personSegments = memberPerPersonRate > 0
+      ? buildPersonSegments(monthKey, personCountEntries, memberEntries)
+      : [];
     const memberSalary = calculateSalary({
       monthKey,
       totals: memberMonthData.totals,
       savedMonthlySalary: memberSavedSalary,
       savedPaidOffAllowance: memberSavedOff,
       deductions: [],
+      perPersonRate: memberPerPersonRate > 0 ? memberPerPersonRate : undefined,
+      personSegments: personSegments.length > 0 ? personSegments : undefined,
     });
+    const memberPerDay = memberSalary.perDay;
     return { worker: member, monthData: memberMonthData, salary: memberSalary, perDay: memberPerDay };
   });
 

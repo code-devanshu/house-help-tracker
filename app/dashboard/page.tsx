@@ -15,11 +15,12 @@ import {
 import { MonthPicker } from "@/components/MonthPicker";
 import { showToast } from "@/components/Toast";
 import { useTheme } from "@/components/ThemeProvider";
-import { loadAppData, saveAppData, upsertDeduction } from "@/lib/storage/localStore";
+import { deleteDeduction, loadAppData, saveAppData, upsertDeduction } from "@/lib/storage/localStore";
 import type { AppData } from "@/lib/storage/schema";
 import { addMonths, daysInMonth, monthLabel } from "@/lib/utils/date";
 import { makeId } from "@/lib/utils/id";
 import { getAppData, syncAppData } from "../workers/action";
+import { buildPersonSegments } from "@/lib/salary/calcSalary";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -60,11 +61,33 @@ function computeWorkerPay(workerId: string, monthKey: string, appData: AppData) 
     else if (e.status === "OFF") totals.off++;
   }
   if (!cfg) return { ...totals, net: 0, gross: 0, deductionsTotal: 0, hasSalary: false };
-  const perDay = days > 0 ? cfg.monthlySalary / days : 0;
-  const totalShortfall = totals.absent + totals.half * 0.5 + totals.off;
-  const coveredByAllowance = Math.min(totalShortfall, cfg.paidOffAllowance);
-  const gross =
-    totals.worked * perDay + totals.half * (perDay / 2) + coveredByAllowance * perDay;
+
+  let gross: number;
+  if (cfg.perPersonRate && cfg.perPersonRate > 0) {
+    const personCountEntries = (appData.personCountLog ?? []).filter((p) => p.monthKey === monthKey);
+    const segments = buildPersonSegments(monthKey, personCountEntries, entries);
+    if (segments.length > 0) {
+      let segGross = 0;
+      let remainingAllowance = cfg.paidOffAllowance;
+      for (const seg of segments) {
+        const segDailyRate = cfg.perPersonRate * seg.count / days;
+        segGross += seg.worked * segDailyRate + seg.half * (segDailyRate / 2);
+        const segShortfall = seg.absent + seg.half * 0.5 + seg.off;
+        const segCovered = Math.min(segShortfall, remainingAllowance);
+        remainingAllowance = Math.max(0, remainingAllowance - segCovered);
+        segGross += segCovered * segDailyRate;
+      }
+      gross = segGross;
+    } else {
+      gross = 0; // no person count set → no salary
+    }
+  } else {
+    const perDay = days > 0 ? cfg.monthlySalary / days : 0;
+    const totalShortfall = totals.absent + totals.half * 0.5 + totals.off;
+    const coveredByAllowance = Math.min(totalShortfall, cfg.paidOffAllowance);
+    gross = totals.worked * perDay + totals.half * (perDay / 2) + coveredByAllowance * perDay;
+  }
+
   const deductionsTotal = appData.deductions
     .filter((d) => d.workerId === workerId && d.monthKey === monthKey)
     .reduce(
@@ -139,12 +162,13 @@ export default function DashboardPage() {
   const [appData, setAppData] = useState<AppData>(() => {
     if (typeof window !== "undefined") return loadAppData();
     return {
-      version: 3,
+      version: 4,
       workers: [],
       entries: [],
       monthLocks: [],
       salaryConfigs: [],
       deductions: [],
+      personCountLog: [],
     };
   });
 
@@ -245,6 +269,16 @@ export default function DashboardPage() {
 
   // Quick-add deduction for a grouped person (stored against the first worker in the group)
   const [quickDeduct, setQuickDeduct] = useState<{ personId: string; amount: string; note: string } | null>(null);
+
+  const handleDeleteGroupDeduction = (deductionId: string) => {
+    const updated = deleteDeduction(deductionId);
+    saveAppData(updated);
+    setAppData(updated);
+    startTransition(async () => {
+      const result = await syncAppData(updated);
+      if (!result.ok) showToast("Sync failed. Changes saved locally.", "error");
+    });
+  };
 
   const handleAddGroupDeduction = () => {
     if (!quickDeduct) return;
@@ -472,6 +506,38 @@ export default function DashboardPage() {
                   {group.rows.map((row) => (
                     <BreakdownRow key={row.worker.id} row={row} maxNet={maxNet} compact monthKey={monthKey} />
                   ))}
+                  {/* Deduction history */}
+                  {(() => {
+                    const items = appData.deductions.filter(
+                      (d) => group.rows.some((r) => r.worker.id === d.workerId) && d.monthKey === monthKey
+                    );
+                    if (!items.length) return null;
+                    return (
+                      <div className="border-t border-slate-100 px-5 py-2.5 dark:border-white/5">
+                        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30">Deductions</div>
+                        <div className="space-y-1">
+                          {items.map((d) => (
+                            <div key={d.id} className="flex items-center justify-between gap-2 rounded-lg border border-rose-100 bg-rose-50/60 px-3 py-1.5 dark:border-rose-500/15 dark:bg-rose-500/8">
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
+                                <span className="text-xs font-semibold text-rose-500 dark:text-rose-300">−₹{money(d.amount)}</span>
+                                <span className="shrink-0 text-[11px] text-slate-400 dark:text-white/30">
+                                  {(() => { const [y,m,dy] = d.dateISO.split("-").map(Number) as [number,number,number]; return new Date(y,m-1,dy).toLocaleDateString(undefined,{day:"numeric",month:"short"}); })()}
+                                </span>
+                                {d.note && <span className="truncate text-[11px] text-slate-500 dark:text-white/40">{d.note}</span>}
+                              </div>
+                              <button
+                                onClick={() => handleDeleteGroupDeduction(d.id)}
+                                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-300 transition hover:bg-rose-100 hover:text-rose-500 dark:text-white/25 dark:hover:bg-rose-500/20 dark:hover:text-rose-400"
+                                title="Remove deduction"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {/* Quick-add deduction */}
                   {quickDeduct?.personId === group.personId ? (
                     <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50 px-5 py-2.5 dark:border-white/5 dark:bg-white/2">

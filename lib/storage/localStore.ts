@@ -2,6 +2,7 @@ import type {
   AppData,
   Deduction,
   MonthLock,
+  PersonCountEntry,
   SalaryConfig,
   ShiftEntry,
   Worker,
@@ -12,7 +13,7 @@ type SaveOptions = {
 };
 
 const STORAGE_KEY = "house_help_tracker_appdata";
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 4;
 
 const nowMs = (): number => Date.now();
 
@@ -32,6 +33,7 @@ const emptyData = (): AppData => ({
   monthLocks: [],
   salaryConfigs: [],
   deductions: [],
+  personCountLog: [],
 });
 
 const normalizeData = (input: unknown): AppData => {
@@ -55,6 +57,10 @@ const normalizeData = (input: unknown): AppData => {
 
     deductions: Array.isArray(obj.deductions)
       ? (obj.deductions as Deduction[])
+      : [],
+
+    personCountLog: Array.isArray((obj as Partial<AppData>).personCountLog)
+      ? ((obj as Partial<AppData>).personCountLog as PersonCountEntry[])
       : [],
   };
 };
@@ -257,3 +263,31 @@ export const getMonthDeductions = (
 };
 
 export const msNow = nowMs;
+
+// -------------------------
+// Person count log
+// -------------------------
+export const upsertPersonCountEntry = (entry: PersonCountEntry): AppData => {
+  const data = loadAppData();
+  const idx = data.personCountLog.findIndex((p) => p.id === entry.id);
+  const next =
+    idx >= 0
+      ? data.personCountLog.map((p, i) => (i === idx ? entry : p))
+      : [entry, ...data.personCountLog];
+  return saveAppData({ ...data, personCountLog: next });
+};
+
+export const deletePersonCountEntry = (entryId: string): AppData => {
+  const data = loadAppData();
+  return saveAppData({
+    ...data,
+    personCountLog: data.personCountLog.filter((p) => p.id !== entryId),
+  });
+};
+
+export const getMonthPersonCounts = (monthKey: string): PersonCountEntry[] => {
+  const data = loadAppData();
+  return data.personCountLog
+    .filter((p) => p.monthKey === monthKey)
+    .sort((a, b) => a.fromDateISO.localeCompare(b.fromDateISO));
+};
